@@ -23,7 +23,3 @@ gem "faraday-retry"
 gem "jsonapi-serializer"
 gem "jwt"
 
-group :development, :test do
-  gem "rack-test"
-  gem "rspec"
-end
