@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # Servicio principal Sinatra API
+  sinatra:
+    build: .
+    container_name: enkihost-sinatra
+    command: /usr/bin/entrypoint.sh bundle exec puma -C config/puma.rb
+    ports:
+      - "4567:4567"
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4096M
+        reservations:
+          cpus: '1.0'
+          memory: 1024M
+    environment: &env
+      RACK_ENV: production
+      APP_ENV: production
+      PORT: 4567
+      MAX_THREADS: 10
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      ENKIMAIL_API_KEY: ${ENKIMAIL_API_KEY}
+      COOLIFY_URL: ${COOLIFY_URL}
+      COOLIFY_TOKEN: ${COOLIFY_TOKEN}
+      COOLIFY_PROJECT_UUID: ${COOLIFY_PROJECT_UUID}
+      COOLIFY_SERVER_UUID: ${COOLIFY_SERVER_UUID}
+      COOLIFY_DESTINATION_UUID: ${COOLIFY_DESTINATION_UUID}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      GITLAB_CLIENT_ID: ${GITLAB_CLIENT_ID}
+      GITLAB_CLIENT_SECRET: ${GITLAB_CLIENT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      FRONTEND_URL: ${FRONTEND_URL}
+    networks:
+      - enkihost-network
+      - coolify-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4567/up"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: always
+
+  worker:
+    build: .
+    container_name: enkihost-sinatra-worker
+    command: bundle exec sidekiq -r ./config/environment.rb
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.50'
+          memory: 512M
+    environment:
+      <<: *env
+    networks:
+      - enkihost-network
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: always
+
+networks:
+  enkihost-network:
+    driver: bridge
+  coolify-proxy:
+    external: true
+    name: coolify

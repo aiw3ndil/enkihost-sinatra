@@ -1,0 +1,76 @@
+services:
+  # Servicio principal Sinatra API
+  sinatra:
+    build: .
+    container_name: enkihost-sinatra-local
+    command: /usr/bin/entrypoint.sh bundle exec puma -C config/puma.rb
+    ports:
+      - "4567:4567"
+    environment:
+      - RACK_ENV=development
+      - APP_ENV=development
+      - PORT=4567
+      - DATABASE_URL=postgres://postgres:password@db:5432/enkihost_api_development
+      - REDIS_URL=redis://redis:6379/1
+      - SECRET_KEY_BASE=development_secret_key_base_32_bytes_long_!
+      - JWT_SECRET_KEY=development_jwt_secret_key_32_bytes_long_!
+    depends_on:
+      - db
+      - redis
+    networks:
+      - enkihost-local
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  worker:
+    build: .
+    container_name: enkihost-sinatra-local-worker
+    command: bundle exec sidekiq -r ./config/environment.rb
+    environment:
+      - RACK_ENV=development
+      - APP_ENV=development
+      - DATABASE_URL=postgres://postgres:password@db:5432/enkihost_api_development
+      - REDIS_URL=redis://redis:6379/1
+      - SECRET_KEY_BASE=development_secret_key_base_32_bytes_long_!
+      - JWT_SECRET_KEY=development_jwt_secret_key_32_bytes_long_!
+    depends_on:
+      - db
+      - redis
+    networks:
+      - enkihost-local
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  db:
+    image: postgres:16-alpine
+    container_name: enkihost-sinatra-local-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=enkihost_api_development
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_local:/var/lib/postgresql/data
+    networks:
+      - enkihost-local
+
+  redis:
+    image: redis:7-alpine
+    container_name: enkihost-sinatra-local-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_local:/data
+    networks:
+      - enkihost-local
+
+networks:
+  enkihost-local:
+    driver: bridge
+
+volumes:
+  postgres_data_local:
+  redis_data_local:

@@ -8,7 +8,10 @@ threads min_threads_count, max_threads_count
 rack_env = ENV.fetch("RACK_ENV") { ENV.fetch("RAILS_ENV", "development") }
 environment rack_env
 
-port ENV.fetch("PORT", 3000)
+port_num = ENV.fetch("PORT", 4567)
+port port_num
+bind "tcp://0.0.0.0:#{port_num}"
+
 pidfile ENV.fetch("PIDFILE", "tmp/pids/server.pid")
 
 plugin :tmp_restart

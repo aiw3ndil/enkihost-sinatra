@@ -409,14 +409,14 @@ class DockerService
 
   def sinatra_dockerfile
     <<~DOCKERFILE
-      FROM ruby:3.3.10-slim
-      RUN apt-get update -qq && apt-get install -y build-essential libyaml-dev
-      WORKDIR /rails
+      FROM ruby:3.3.7-slim
+      RUN apt-get update -qq && apt-get install -y build-essential libyaml-dev libpq-dev
+      WORKDIR /app
       COPY Gemfile* ./
       RUN bundle install
       COPY . .
       EXPOSE 4567
-      CMD ["ruby", "app.rb", "-o", "0.0.0.0"]
+      CMD ["bundle", "exec", "puma", "-C", "config/puma.rb"]
     DOCKERFILE
   end
 
