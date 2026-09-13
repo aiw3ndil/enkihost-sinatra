@@ -8,7 +8,8 @@ FROM ruby:${RUBY_VERSION}-slim AS builder
 
 WORKDIR /app
 
-ENV BUNDLE_PATH="/usr/local/bundle" \
+ENV DEBIAN_FRONTEND=noninteractive \
+    BUNDLE_PATH="/usr/local/bundle" \
     BUNDLE_WITHOUT="development:test"
 
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
@@ -17,21 +18,23 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     git \
     pkg-config \
     libyaml-dev \
-    libvips \
     && rm -rf /var/lib/apt/lists/*
 
 COPY Gemfile Gemfile.lock ./
 
 RUN gem install bundler -v 2.5.22 && \
     bundle install --jobs 4 --retry 3 && \
-    rm -rf /usr/local/bundle/cache/*.gem
+    rm -rf /usr/local/bundle/cache/*.gem \
+    && find /usr/local/bundle/gems/ -name "*.c" -delete \
+    && find /usr/local/bundle/gems/ -name "*.o" -delete
 
 # -------------------------------------------------------------
 # Stage 2: Imagen Final Ligera para Sinatra + Puma
 # -------------------------------------------------------------
 FROM ruby:${RUBY_VERSION}-slim
 
-ENV RACK_ENV="production" \
+ENV DEBIAN_FRONTEND=noninteractive \
+    RACK_ENV="production" \
     PORT=4567 \
     BUNDLE_PATH="/usr/local/bundle" \
     BUNDLE_WITHOUT="development:test"
@@ -47,12 +50,13 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     gnupg \
     lsb-release \
     libpq5 \
-    libvips \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
     && apt-get update -qq \
     && apt-get install -y --no-install-recommends docker-ce-cli \
+    && apt-get purge -y gnupg lsb-release \
+    && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar gemas precompiladas desde builder
@@ -69,3 +73,4 @@ EXPOSE 4567
 
 ENTRYPOINT ["/usr/bin/entrypoint.sh"]
 CMD ["bundle", "exec", "puma", "-C", "config/puma.rb"]
+

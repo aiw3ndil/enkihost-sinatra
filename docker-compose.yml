@@ -5,7 +5,7 @@ services:
   sinatra:
     build: .
     container_name: enkihost-sinatra
-    command: /usr/bin/entrypoint.sh bundle exec puma -C config/puma.rb
+    command: bundle exec puma -C config/puma.rb
     ports:
       - "4567:4567"
     deploy:

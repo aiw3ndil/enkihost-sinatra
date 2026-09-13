@@ -1,0 +1,14 @@
+.git
+.gitignore
+.dockerignore
+log/*
+tmp/*
+!log/.keep
+!tmp/.keep
+.env
+.env.*
+.bundle
+vendor/bundle
+Dockerfile*
+docker-compose*.yml
+README.md
