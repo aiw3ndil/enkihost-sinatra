@@ -46,8 +46,12 @@ else
 
   if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
     echo "Database connection established!"
-    echo "Running database migrations..."
-    bundle exec rake db:migrate || echo "Warning: db:migrate encountered an issue, proceeding anyway."
+    if [[ "$*" == *"sidekiq"* ]]; then
+      echo "Sidekiq worker process: skipping database migrations."
+    else
+      echo "Running database migrations..."
+      bundle exec rake db:migrate || echo "Warning: db:migrate encountered an issue, proceeding anyway."
+    fi
   fi
 fi
 
