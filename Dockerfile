@@ -1,10 +1,15 @@
 # syntax=docker/dockerfile:1
+ARG RUBY_VERSION=3.3.7
+
 # -------------------------------------------------------------
 # Stage 1: Build & Gems (Compilación de dependencias nativas)
 # -------------------------------------------------------------
-FROM ruby:3.3.7-slim AS builder
+FROM ruby:${RUBY_VERSION}-slim AS builder
 
 WORKDIR /app
+
+ENV BUNDLE_PATH="/usr/local/bundle" \
+    BUNDLE_WITHOUT="development:test"
 
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     build-essential \
@@ -12,24 +17,24 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     git \
     pkg-config \
     libyaml-dev \
+    libvips \
     && rm -rf /var/lib/apt/lists/*
 
 COPY Gemfile Gemfile.lock ./
 
-RUN bundle config set --local without 'development test' \
-    && bundle install --jobs 4 --retry 3 \
-    && rm -rf /usr/local/bundle/cache/*.gem \
-    && find /usr/local/bundle/gems/ -name "*.c" -delete \
-    && find /usr/local/bundle/gems/ -name "*.o" -delete
+RUN gem install bundler -v 2.5.22 && \
+    bundle install --jobs 4 --retry 3 && \
+    rm -rf /usr/local/bundle/cache/*.gem
 
 # -------------------------------------------------------------
 # Stage 2: Imagen Final Ligera para Sinatra + Puma
 # -------------------------------------------------------------
-FROM ruby:3.3.7-slim
+FROM ruby:${RUBY_VERSION}-slim
 
 ENV RACK_ENV="production" \
     PORT=4567 \
-    BUNDLE_PATH="/usr/local/bundle"
+    BUNDLE_PATH="/usr/local/bundle" \
+    BUNDLE_WITHOUT="development:test"
 
 WORKDIR /app
 
@@ -41,6 +46,8 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     ca-certificates \
     gnupg \
     lsb-release \
+    libpq5 \
+    libvips \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
