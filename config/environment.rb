@@ -45,6 +45,13 @@ module Rails
       credentials: OpenStruct.new(
         fetch: ->(key, default = nil) { ENV[key.to_s.upcase] || default }
       ),
+      config: OpenStruct.new(
+        load_database_yaml: (
+          db_file = File.expand_path('database.yml', __dir__)
+          File.exist?(db_file) ? (YAML.safe_load(ERB.new(File.read(db_file)).result, aliases: true) rescue {}) : {}
+        ),
+        paths: { 'db/migrate' => ['db/migrate'] }
+      ),
       secret_key_base: ENV['SECRET_KEY_BASE'] || 'fallback_secret_key_base_for_enkihost_sinatra_api'
     )
   end

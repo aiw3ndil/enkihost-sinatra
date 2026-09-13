@@ -8,9 +8,8 @@ threads min_threads_count, max_threads_count
 rack_env = ENV.fetch("RACK_ENV") { ENV.fetch("RAILS_ENV", "development") }
 environment rack_env
 
-port_num = ENV.fetch("PORT", 4567)
+port_num = Integer(ENV.fetch("PORT", 4567))
 port port_num
-bind "tcp://0.0.0.0:#{port_num}"
 
 pidfile ENV.fetch("PIDFILE", "tmp/pids/server.pid")
 
