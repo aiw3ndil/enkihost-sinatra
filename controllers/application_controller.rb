@@ -87,16 +87,20 @@ class ApplicationController < Sinatra::Base
       token = auth_header&.split(' ')&.last
       return nil unless token.present?
 
-      # 1. Direct JTI match
-      user = User.find_by(jti: token) if defined?(User)
-      return user if user
-
-      # 2. JWT Decode
-      secret = ENV['JWT_SECRET_KEY'] || Rails.application.secret_key_base
-      decoded, _ = JWT.decode(token, secret, true, { algorithm: 'HS256' })
-      if decoded && (decoded['sub'] || decoded['jti'])
-        User.find_by(id: decoded['sub']) || User.find_by(jti: decoded['jti'])
+      # 1. If token is in standard JWT format (3 dot-separated parts), decode it first
+      if token.count('.') == 2
+        secret = ENV['JWT_SECRET_KEY'] || Rails.application.secret_key_base
+        decoded, _ = JWT.decode(token, secret, true, { algorithm: 'HS256' })
+        if decoded && (decoded['sub'] || decoded['jti'])
+          return User.find_by(id: decoded['sub']) || User.find_by(jti: decoded['jti']) if defined?(User)
+        end
       end
+
+      # 2. Fallback to direct JTI match (for non-JWT tokens or legacy auth)
+      User.find_by(jti: token) if defined?(User)
+    rescue JWT::DecodeError
+      # If JWT decoding fails, try direct JTI lookup as fallback
+      User.find_by(jti: token) if defined?(User)
     rescue StandardError => e
       warn "Authentication error: #{e.message}"
       nil

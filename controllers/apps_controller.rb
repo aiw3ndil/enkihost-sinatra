@@ -78,7 +78,7 @@ class AppsController < ApplicationController
 
   helpers do
     def index
-      @apps = current_user.apps.includes(:latest_deployment)
+      @apps = current_user.apps.includes(:latest_deployment, :user)
       json_data = AppSerializer.new(@apps).serializable_hash[:data]
       if json_data.is_a?(Array)
         json_data.map { |app| app[:attributes] }.to_json
@@ -195,7 +195,7 @@ class AppsController < ApplicationController
     private
 
     def set_app
-      @app = current_user.apps.includes(:latest_deployment).find(params[:id])
+      @app = current_user.apps.includes(:latest_deployment, :user).find(params[:id])
     rescue ActiveRecord::RecordNotFound
       halt 404, { 'Content-Type' => 'application/json' }, { error: 'App not found' }.to_json
     end
