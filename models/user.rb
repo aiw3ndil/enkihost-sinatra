@@ -82,6 +82,27 @@ class User < ApplicationRecord
   encrypts :gitlab_token rescue nil
   encrypts :google_token rescue nil
 
+  def github_token
+    super
+  rescue ActiveRecord::Encryption::Errors::Decryption, StandardError => e
+    warn "ActiveRecord::Encryption error reading github_token for user #{id}: #{e.message}"
+    nil
+  end
+
+  def gitlab_token
+    super
+  rescue ActiveRecord::Encryption::Errors::Decryption, StandardError => e
+    warn "ActiveRecord::Encryption error reading gitlab_token for user #{id}: #{e.message}"
+    nil
+  end
+
+  def google_token
+    super
+  rescue ActiveRecord::Encryption::Errors::Decryption, StandardError => e
+    warn "ActiveRecord::Encryption error reading google_token for user #{id}: #{e.message}"
+    nil
+  end
+
   before_validation :set_jti
 
   def password

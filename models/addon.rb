@@ -17,6 +17,13 @@ class Addon < ApplicationRecord
   encrypts :config rescue nil
   serialize :config, coder: JSON
 
+  def config
+    super
+  rescue ActiveRecord::Encryption::Errors::Decryption, StandardError => e
+    warn "ActiveRecord::Encryption error reading addon config #{id}: #{e.message}"
+    {}
+  end
+
   validates :kind, presence: true, inclusion: { in: kinds.keys }
   validates :status, presence: true, inclusion: { in: statuses.keys }
   validates :name, presence: true, uniqueness: { scope: :app_id }

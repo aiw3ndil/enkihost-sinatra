@@ -69,14 +69,24 @@ end
 
 # Setup ActiveRecord Encryption with fallbacks
 begin
-  fallback_key = '9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c' # 32 bytes
-  env_primary = ENV['AR_PRIMARY_KEY']
-  env_deterministic = ENV['AR_DETERMINISTIC_KEY']
+  env_primary = ENV['AR_PRIMARY_KEY'] || ENV['ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY']
+  env_deterministic = ENV['AR_DETERMINISTIC_KEY'] || ENV['ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY']
+  env_salt = ENV['AR_SALT'] || ENV['ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT']
+  fallback_key = '9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c'
+
+  primary_key = env_primary.presence || fallback_key
+  deterministic_key = env_deterministic.presence || fallback_key
+  key_derivation_salt = env_salt.presence || 'salt_enkihost_prod_2026_secure_!!'
+
+  primary_key = primary_key.ljust(32, '0') if primary_key.bytesize < 32
+  deterministic_key = deterministic_key.ljust(32, '0') if deterministic_key.bytesize < 32
+  key_derivation_salt = key_derivation_salt.ljust(32, '0') if key_derivation_salt.bytesize < 32
 
   ActiveRecord::Encryption.configure(
-    primary_key: (env_primary || fallback_key).ljust(32, '0')[0..31],
-    deterministic_key: (env_deterministic || fallback_key).ljust(32, '0')[0..31],
-    key_derivation_salt: ENV['AR_SALT'] || 'salt_enkihost_prod_2026_secure_!!'
+    primary_key: primary_key,
+    deterministic_key: deterministic_key,
+    key_derivation_salt: key_derivation_salt,
+    support_unencrypted_data: true
   )
 rescue StandardError => e
   warn "ActiveRecord::Encryption config error: #{e.message}"
