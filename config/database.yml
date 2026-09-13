@@ -1,0 +1,22 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("MAX_THREADS") { ENV.fetch("RAILS_MAX_THREADS", 15) } %>
+  host: <%= ENV["DATABASE_HOST"] || ENV["postgresql_host"] || "localhost" %>
+  username: <%= ENV["DATABASE_USERNAME"] || ENV["postgresql_user"] || "postgres" %>
+  password: <%= ENV["DATABASE_PASSWORD"] || ENV["postgresql_password"] || "password" %>
+  port: <%= ENV["DATABASE_PORT"] || 5432 %>
+  url: <%= ENV["DATABASE_URL"] %>
+
+development:
+  <<: *default
+  database: <%= ENV["DATABASE_NAME"] || "enkihost_api_development" %>
+
+test:
+  <<: *default
+  database: <%= ENV["DATABASE_NAME_TEST"] || "enkihost_api_test" %>
+
+production:
+  <<: *default
+  database: <%= ENV["DATABASE_NAME"] || "enkihost_production" %>
+  url: <%= ENV["DATABASE_URL"] %>

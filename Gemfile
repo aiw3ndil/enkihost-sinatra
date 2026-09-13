@@ -1,0 +1,29 @@
+source "https://rubygems.org"
+
+ruby "3.3.7"
+
+gem "sinatra"
+gem "sinatra-contrib"
+gem "sinatra-activerecord"
+gem "activerecord", "~> 7.1.0"
+gem "json", "~> 2.8"
+gem "pg", "~> 1.5"
+gem "puma", ">= 5.0"
+gem "bcrypt", "~> 3.1.7"
+gem "pundit"
+gem "rack-cors"
+gem "dotenv"
+gem "rake"
+gem "sidekiq"
+gem "octokit", "~> 9.0"
+gem "gitlab", "~> 4.19"
+gem "stripe"
+gem "aws-sdk-s3", "~> 1.0"
+gem "faraday-retry"
+gem "jsonapi-serializer"
+gem "jwt"
+
+group :development, :test do
+  gem "rack-test"
+  gem "rspec"
+end

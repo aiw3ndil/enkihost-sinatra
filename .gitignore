@@ -1,0 +1,8 @@
+/.bundle
+/.env*
+!/.env*.erb
+/log/*
+!/log/.keep
+/tmp/*
+!/tmp/.keep
+/.ruby-lsp
