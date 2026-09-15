@@ -2,8 +2,8 @@ class DeploymentJob < ApplicationJob
   queue_as :default
 
   def perform(deployment_id)
-    deployment = Deployment.find(deployment_id).reload
-    return unless deployment.queued?
+    deployment = Deployment.find_by(id: deployment_id)&.reload
+    return unless deployment&.queued?
 
     deployment.update!(status: :building, log: "Starting REAL deployment for #{deployment.app.name}...\n")
     broadcast_status(deployment)

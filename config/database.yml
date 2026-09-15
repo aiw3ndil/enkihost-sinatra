@@ -1,7 +1,10 @@
 default: &default
   adapter: postgresql
   encoding: unicode
-  pool: <%= ENV.fetch("MAX_THREADS") { ENV.fetch("RAILS_MAX_THREADS", 15) } %>
+  pool: <%= ENV["DB_POOL"] || (Integer(ENV.fetch("MAX_THREADS", 10)) + 5) %>
+  checkout_timeout: <%= ENV.fetch("DB_CHECKOUT_TIMEOUT", 10) %>
+  connect_timeout: <%= ENV.fetch("DB_CONNECT_TIMEOUT", 5) %>
+  reaping_frequency: <%= ENV.fetch("DB_REAPING_FREQUENCY", 10) %>
   host: <%= ENV["DATABASE_HOST"] || ENV["postgresql_host"] || "localhost" %>
   username: <%= ENV["DATABASE_USERNAME"] || ENV["postgresql_user"] || "postgres" %>
   password: <%= ENV["DATABASE_PASSWORD"] || ENV["postgresql_password"] || "password" %>

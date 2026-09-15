@@ -132,6 +132,40 @@ if defined?(Sidekiq)
     config.redis = { url: redis_url }
   end
   Sidekiq.strict_args!(false) if Sidekiq.respond_to?(:strict_args!)
+
+  # Rails ActiveJob compatibility wrapper for Sidekiq
+  # Resolves `uninitialized constant Sidekiq::ActiveJob (NameError)` for legacy or queued ActiveJob payloads
+  module Sidekiq
+    module ActiveJob
+      class Wrapper
+        include Sidekiq::Job
+
+        def perform(job_data = {})
+          return unless job_data.is_a?(Hash)
+
+          job_class_name = job_data['job_class'] || job_data[:job_class]
+          return unless job_class_name
+
+          klass = Object.const_get(job_class_name) rescue nil
+          unless klass
+            warn "[Sidekiq::ActiveJob::Wrapper] Unknown job class #{job_class_name}, skipping."
+            return
+          end
+
+          args = job_data['arguments'] || job_data[:arguments] || []
+          job_inst = klass.new
+          if job_inst.respond_to?(:perform)
+            job_inst.perform(*args)
+          end
+        rescue ArgumentError => e
+          warn "[Sidekiq::ActiveJob::Wrapper] ArgumentError executing #{job_data['job_class']}: #{e.message} - discarding malformed job"
+        rescue StandardError => e
+          warn "[Sidekiq::ActiveJob::Wrapper] Error executing #{job_data['job_class']}: #{e.class}: #{e.message}"
+          raise e
+        end
+      end
+    end
+  end
 end
 
 # Require controllers in dependency order

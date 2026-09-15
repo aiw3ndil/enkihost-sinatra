@@ -35,6 +35,21 @@ class EnkihostApp < Sinatra::Base
     env['PATH_INFO'] = env['PATH_INFO'].squeeze('/') if env['PATH_INFO']
   end
 
+  # Rack middleware to guarantee ActiveRecord connections are ALWAYS released back to the pool
+  class ConnectionPoolCleaner
+    def initialize(app)
+      @app = app
+    end
+
+    def call(env)
+      @app.call(env)
+    ensure
+      ActiveRecord::Base.connection_handler.clear_active_connections! if defined?(ActiveRecord::Base)
+    end
+  end
+
+  use ConnectionPoolCleaner
+
   after do
     ActiveRecord::Base.connection_handler.clear_active_connections! if defined?(ActiveRecord::Base)
   end

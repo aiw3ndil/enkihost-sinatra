@@ -3,8 +3,18 @@ require 'shellwords'
 class BackupJob < ApplicationJob
   queue_as :default
 
-  def perform(user_id, addon_id = nil)
-    user = User.find(user_id)
+  def perform(user_id = nil, addon_id = nil)
+    if user_id.blank?
+      Rails.logger.warn "BackupJob: called without user_id, skipping."
+      return
+    end
+
+    user = User.find_by(id: user_id)
+    unless user
+      Rails.logger.warn "BackupJob: User #{user_id} not found, skipping."
+      return
+    end
+
     addon = user.addons.find_by(id: addon_id) if addon_id
     
     Rails.logger.info "Starting PostgreSQL backup job for user #{user.id}..."
