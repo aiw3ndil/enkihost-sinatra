@@ -17,6 +17,17 @@ require 'logger'
 require 'pathname'
 require 'ostruct'
 require 'active_support/core_ext/string/inquiry'
+require 'enkimail'
+require 'mail'
+
+# Configure Mail with Enkimail delivery method
+if ENV['ENKIMAIL_API_KEY'].present?
+  Mail.defaults do
+    delivery_method Enkimail::DeliveryMethod,
+                    api_key: ENV['ENKIMAIL_API_KEY'],
+                    base_url: ENV['ENKIMAIL_BASE_URL'] || 'https://api.enkimail.com'
+  end
+end
 
 # Provide minimal Rails compatibility shim for shared services/jobs
 module Rails

@@ -23,3 +23,5 @@ gem "faraday-retry"
 gem "jsonapi-serializer"
 gem "jwt"
 
+
+gem "enkimail", "~> 0.1.6"

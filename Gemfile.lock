@@ -49,8 +49,12 @@ GEM
     concurrent-ruby (1.3.8)
     connection_pool (3.0.2)
     csv (3.3.6)
+    date (3.5.1)
     dotenv (3.2.0)
     drb (2.2.3)
+    enkimail (0.1.6)
+      faraday (~> 2.0)
+      mail (>= 2.8)
     faraday (2.14.3)
       faraday-net_http (>= 2.0, < 3.5)
       json
@@ -75,6 +79,12 @@ GEM
     jwt (3.3.0)
       base64
     logger (1.7.0)
+    mail (2.9.1)
+      logger
+      mini_mime (>= 0.1.1)
+      net-imap
+      net-pop
+      net-smtp
     mini_mime (1.1.5)
     minitest (6.0.6)
       drb (~> 2.0)
@@ -86,6 +96,15 @@ GEM
     mutex_m (0.3.0)
     net-http (0.9.1)
       uri (>= 0.11.1)
+    net-imap (0.6.7)
+      date
+      net-protocol
+    net-pop (0.1.2)
+      net-protocol
+    net-protocol (0.3.0)
+      timeout
+    net-smtp (0.5.1)
+      net-protocol
     nio4r (2.7.5)
     octokit (9.2.0)
       faraday (>= 1, < 3)
@@ -172,6 +191,7 @@ DEPENDENCIES
   aws-sdk-s3 (~> 1.0)
   bcrypt (~> 3.1.7)
   dotenv
+  enkimail (~> 0.1.6)
   faraday-retry
   gitlab (~> 4.19)
   json (~> 2.8)

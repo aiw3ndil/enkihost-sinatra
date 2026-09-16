@@ -140,13 +140,25 @@ class DeploymentJob < ApplicationJob
       domain = app.domains.first&.fqdn || "#{app.subdomain}.enkihost.com"
       
       log_update(deployment, "Deployment successful! App is now running at https://#{domain}")
-      DeploymentMailer.success(deployment).deliver_later
+      if defined?(DeploymentMailer)
+        begin
+          DeploymentMailer.success(deployment).deliver_later
+        rescue StandardError => mail_err
+          log_update(deployment, "⚠️ Mailer warning: #{mail_err.message}")
+        end
+      end
 
     rescue StandardError => e
       log_update(deployment, "ERROR during deployment: #{e.message}")
       deployment.update!(status: :failed)
       broadcast_status(deployment)
-      DeploymentMailer.failure(deployment).deliver_later
+      if defined?(DeploymentMailer)
+        begin
+          DeploymentMailer.failure(deployment).deliver_later
+        rescue StandardError => mail_err
+          log_update(deployment, "⚠️ Mailer warning: #{mail_err.message}")
+        end
+      end
     end
   end
 
