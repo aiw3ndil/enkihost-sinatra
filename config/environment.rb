@@ -72,6 +72,13 @@ module Rails
   end
 end
 
+# ActionCable compatibility shim for LogsChannel in Sinatra
+module LogsChannel
+  def self.broadcast_to(_channel, _message)
+    # No-op: deployment logs are persisted to DB and retrieved via REST API polling
+  end
+end
+
 # Database connection setup
 db_config_file = File.expand_path('database.yml', __dir__)
 if File.exist?(db_config_file)
