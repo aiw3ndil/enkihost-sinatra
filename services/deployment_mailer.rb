@@ -57,11 +57,16 @@ class DeploymentMailer
 
       subject, body_text, html_body = build_email_content(action, app_name, domain, user.name, deployment)
 
+      raw_base_url = ENV['ENKIMAIL_BASE_URL'].presence || 'https://api.enkimail.com'
+      # Prevent HTTP 307 redirects (http:// -> https:// or apex enkimail.com -> api.enkimail.com)
+      base_url = raw_base_url.sub(%r{\Ahttp://api\.enkimail\.com}i, 'https://api.enkimail.com')
+      base_url = base_url.sub(%r{\Ahttps?://(?:www\.)?enkimail\.com/?\z}i, 'https://api.enkimail.com')
+
       # Ensure Mail defaults are set with Enkimail::DeliveryMethod
       Mail.defaults do
         delivery_method Enkimail::DeliveryMethod,
                         api_key: api_key,
-                        base_url: ENV['ENKIMAIL_BASE_URL'] || 'https://api.enkimail.com'
+                        base_url: base_url
       end
 
       response = Mail.deliver do

@@ -22,10 +22,14 @@ require 'mail'
 
 # Configure Mail with Enkimail delivery method
 if ENV['ENKIMAIL_API_KEY'].present?
+  raw_base_url = ENV['ENKIMAIL_BASE_URL'].presence || 'https://api.enkimail.com'
+  base_url = raw_base_url.sub(%r{\Ahttp://api\.enkimail\.com}i, 'https://api.enkimail.com')
+  base_url = base_url.sub(%r{\Ahttps?://(?:www\.)?enkimail\.com/?\z}i, 'https://api.enkimail.com')
+
   Mail.defaults do
     delivery_method Enkimail::DeliveryMethod,
                     api_key: ENV['ENKIMAIL_API_KEY'],
-                    base_url: ENV['ENKIMAIL_BASE_URL'] || 'https://api.enkimail.com'
+                    base_url: base_url
   end
 end
 
