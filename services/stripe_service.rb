@@ -1,6 +1,13 @@
+# frozen_string_literal: true
+
+require 'stripe'
+
 class StripeService
   def initialize
-    Stripe.api_key = ENV['STRIPE_SECRET_KEY']
+    api_key = ENV['STRIPE_SECRET_KEY']
+    raise 'Stripe configuration missing on server (STRIPE_SECRET_KEY is not set)' if api_key.blank?
+
+    Stripe.api_key = api_key
   end
 
   def create_customer(user)
@@ -15,13 +22,16 @@ class StripeService
     customer.id
   end
 
-  def create_checkout_session(user, plan_name, success_url, cancel_url)
+  def create_checkout_session(user, plan_name, success_url, cancel_url, price_id_param = nil)
     customer_id = create_customer(user)
-    price_id = case plan_name
+    price_id = price_id_param.presence ||
+               case plan_name
                when 'ignite' then ENV['STRIPE_PRICE_IGNITE_ID']
                when 'blaze' then ENV['STRIPE_PRICE_BLAZE_ID']
                else raise "Invalid plan: #{plan_name}"
                end
+
+    raise "Stripe price ID for plan #{plan_name} is not configured" if price_id.blank?
 
     Stripe::Checkout::Session.create({
       customer: customer_id,
@@ -49,20 +59,16 @@ class StripeService
         payload, sig_header, endpoint_secret
       )
     rescue JSON::ParserError
-      # Invalid payload
       return { status: 400, error: 'Invalid payload' }
     rescue Stripe::SignatureVerificationError
-      # Invalid signature
       return { status: 400, error: 'Invalid signature' }
     end
 
-    # Handle the event
     case event.type
     when 'checkout.session.completed'
       handle_checkout_completed(event.data.object)
     when 'customer.subscription.deleted'
       handle_subscription_deleted(event.data.object)
-    # Add more event types here as needed
     else
       Rails.logger.info "Unhandled event type: #{event.type}"
     end
@@ -91,7 +97,7 @@ class StripeService
     user = User.find_by(stripe_subscription_id: subscription.id)
     if user
       user.update!(
-        plan: 'spark', # Downgrade to free tier
+        plan: 'spark',
         stripe_subscription_id: nil
       )
       Rails.logger.info "User #{user.id} subscription deleted, downgraded to spark"

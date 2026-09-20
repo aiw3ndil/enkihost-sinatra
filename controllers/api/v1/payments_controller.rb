@@ -22,7 +22,13 @@ module Api
 
           begin
             stripe_service = StripeService.new
-            session = stripe_service.create_checkout_session(current_user, plan_name, success_url, cancel_url)
+            session = stripe_service.create_checkout_session(
+              current_user,
+              plan_name,
+              success_url,
+              cancel_url,
+              params[:stripe_price_id]
+            )
 
             {
               url: session.url,

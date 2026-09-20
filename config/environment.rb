@@ -19,6 +19,9 @@ require 'ostruct'
 require 'active_support/core_ext/string/inquiry'
 require 'enkimail'
 require 'mail'
+require 'stripe'
+require 'octokit'
+require 'gitlab'
 
 # Configure Mail with Enkimail delivery method
 if ENV['ENKIMAIL_API_KEY'].present?
