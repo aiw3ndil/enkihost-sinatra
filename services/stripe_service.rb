@@ -22,10 +22,12 @@ class StripeService
     customer.id
   end
 
-  def create_checkout_session(user, plan_name, success_url, cancel_url, price_id_param = nil)
+  def create_checkout_session(user, plan_name, success_url, cancel_url, price_id_param = nil, trial_days_param = nil)
     customer_id = create_customer(user)
+    plan_key = plan_name.to_s.downcase.strip
+
     price_id = price_id_param.presence ||
-               case plan_name
+               case plan_key
                when 'ignite' then ENV['STRIPE_PRICE_IGNITE_ID']
                when 'blaze' then ENV['STRIPE_PRICE_BLAZE_ID']
                else raise "Invalid plan: #{plan_name}"
@@ -48,8 +50,8 @@ class StripeService
     end
 
     subscription_data = {}
-    trial_days = ENV.fetch('STRIPE_IGNITE_TRIAL_DAYS', '14').to_i
-    if plan_name == 'ignite' && trial_days.positive?
+    trial_days = trial_days_param.presence&.to_i || (plan_key == 'ignite' ? ENV.fetch('STRIPE_IGNITE_TRIAL_DAYS', '14').to_i : 0)
+    if trial_days.positive?
       subscription_data[:trial_period_days] = trial_days
     end
 

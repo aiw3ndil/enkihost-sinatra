@@ -21,13 +21,16 @@ module Api
           cancel_url = ENV['STRIPE_CANCEL_URL'] || "#{frontend_url}/dashboard/billing/cancel"
 
           begin
+            stripe_price_id = params[:stripe_price_id] || (params[:payment] && params[:payment][:stripe_price_id])
+            trial_days = params[:trial_days] || (params[:payment] && params[:payment][:trial_days])
             stripe_service = StripeService.new
             session = stripe_service.create_checkout_session(
               current_user,
               plan_name,
               success_url,
               cancel_url,
-              params[:stripe_price_id]
+              stripe_price_id,
+              trial_days
             )
 
             {
