@@ -33,7 +33,27 @@ class StripeService
 
     raise "Stripe price ID for plan #{plan_name} is not configured" if price_id.blank?
 
-    Stripe::Checkout::Session.create({
+    # If a Product ID (prod_...) was provided instead of a Price ID (price_...), resolve its price automatically
+    if price_id.start_with?('prod_')
+      product = Stripe::Product.retrieve(price_id)
+      resolved_price = if product.default_price.is_a?(String)
+                         product.default_price
+                       elsif product.default_price.respond_to?(:id)
+                         product.default_price.id
+                       else
+                         nil
+                       end
+      price_id = resolved_price.presence || Stripe::Price.list(product: price_id, active: true, limit: 1).data.first&.id
+      raise "No active price found for Stripe product #{product.id}" if price_id.blank?
+    end
+
+    subscription_data = {}
+    trial_days = ENV.fetch('STRIPE_IGNITE_TRIAL_DAYS', '14').to_i
+    if plan_name == 'ignite' && trial_days.positive?
+      subscription_data[:trial_period_days] = trial_days
+    end
+
+    session_params = {
       customer: customer_id,
       payment_method_types: ['card'],
       line_items: [{
@@ -47,7 +67,10 @@ class StripeService
         user_id: user.id,
         plan_name: plan_name
       }
-    })
+    }
+    session_params[:subscription_data] = subscription_data unless subscription_data.empty?
+
+    Stripe::Checkout::Session.create(session_params)
   end
 
   def self.handle_webhook(payload, sig_header)
