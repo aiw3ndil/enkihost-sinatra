@@ -161,6 +161,7 @@ class User < ApplicationRecord
     user.google_uid = uid
     user.google_token = access_token
     user.google_username = name if name.present?
+    user.name = name if user.name.blank? && name.present?
     user.save!
 
     user
