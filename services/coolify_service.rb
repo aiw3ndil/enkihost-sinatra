@@ -240,8 +240,10 @@ class CoolifyService
     else
       # GitHub cleaning
       # If the user pasted a full URL as a token, we extract only the alphanumeric part or the last part
-      raw_token = app.user.github_token.to_s.strip
-      clean_token = raw_token.gsub(%r{https?://}, '').split('@').first.split('/').last
+      raw_token = app.user&.github_token.to_s.strip
+      clean_token = if raw_token.present?
+                      raw_token.gsub(%r{https?://}, '').split('@').first&.split('/')&.last
+                    end
       
       if clean_token.present? && clean_token.length > 5
         log(deployment, "ℹ️ Injecting GitHub token for private repository.")
