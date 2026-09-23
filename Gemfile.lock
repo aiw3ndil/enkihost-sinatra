@@ -55,6 +55,7 @@ GEM
     enkimail (0.1.6)
       faraday (~> 2.0)
       mail (>= 2.8)
+    eventmachine (1.2.7)
     faraday (2.14.3)
       faraday-net_http (>= 2.0, < 3.5)
       json
@@ -63,6 +64,9 @@ GEM
       net-http (~> 0.5)
     faraday-retry (2.4.0)
       faraday (~> 2.0)
+    faye-websocket (0.11.4)
+      eventmachine (>= 0.12.0)
+      websocket-driver (>= 0.5.1, < 0.8.0)
     gitlab (4.20.1)
       httparty (~> 0.20)
       terminal-table (>= 1.5.1)
@@ -176,6 +180,10 @@ GEM
       unicode-emoji (~> 4.1)
     unicode-emoji (4.2.0)
     uri (1.1.1)
+    websocket-driver (0.7.7)
+      base64
+      websocket-extensions (>= 0.1.0)
+    websocket-extensions (0.1.5)
 
 PLATFORMS
   aarch64-linux
@@ -193,6 +201,7 @@ DEPENDENCIES
   dotenv
   enkimail (~> 0.1.6)
   faraday-retry
+  faye-websocket (~> 0.11.3)
   gitlab (~> 4.19)
   json (~> 2.8)
   jsonapi-serializer

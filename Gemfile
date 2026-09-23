@@ -25,3 +25,4 @@ gem "jwt"
 
 
 gem "enkimail", "~> 0.1.6"
+gem "faye-websocket", "~> 0.11.3"

@@ -35,6 +35,24 @@ class EnkihostApp < Sinatra::Base
     env['PATH_INFO'] = env['PATH_INFO'].squeeze('/') if env['PATH_INFO']
   end
 
+  # ActionCable / Terminal WebSocket Rack middleware
+  class TerminalCableMiddleware
+    def initialize(app)
+      @app = app
+    end
+
+    def call(env)
+      path = env['PATH_INFO']
+      if (path == '/cable' || path == '/api/v1/cable') && Faye::WebSocket.websocket?(env)
+        TerminalWebsocketHandler.call(env)
+      else
+        @app.call(env)
+      end
+    end
+  end
+
+  use TerminalCableMiddleware
+
   # Rack middleware to guarantee ActiveRecord connections are ALWAYS released back to the pool
   class ConnectionPoolCleaner
     def initialize(app)
@@ -66,6 +84,19 @@ class EnkihostApp < Sinatra::Base
     content_type :json
     status 200
     { status: 'online', app: 'Enkihost Sinatra API' }.to_json
+  end
+
+  # ActionCable fallback route when not upgraded to WebSocket
+  get '/cable' do
+    content_type :json
+    status 400
+    { error: 'WebSocket upgrade required' }.to_json
+  end
+
+  get '/api/v1/cable' do
+    content_type :json
+    status 400
+    { error: 'WebSocket upgrade required' }.to_json
   end
 
   # Mount Auth & User Controllers
