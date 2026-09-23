@@ -18,7 +18,19 @@ class Addon < ApplicationRecord
   serialize :config, coder: JSON
 
   def config
-    super
+    raw = super
+    if raw.is_a?(String)
+      begin
+        parsed = JSON.parse(raw)
+        parsed.is_a?(Hash) ? parsed : { 'url' => raw }
+      rescue JSON::ParserError
+        { 'url' => raw }
+      end
+    elsif raw.is_a?(Hash)
+      raw
+    else
+      {}
+    end
   rescue ActiveRecord::Encryption::Errors::Decryption, StandardError => e
     warn "ActiveRecord::Encryption error reading addon config #{id}: #{e.message}"
     {}
