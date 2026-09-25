@@ -268,17 +268,34 @@ class App < ApplicationRecord
     return if repository_url.blank?
     
     url = repository_url.to_s.strip
-    
-    # Extract owner/repo by taking the last two parts of the URL
-    # Handles: https://github.com/owner/repo, https://token@github.com/owner/repo, etc.
-    parts = url.gsub(/\.git$/, '').split('/').reject(&:blank?)
-    path = parts.last(2).join('/')
 
-    if url.include?('gitlab.com')
-      self.repository_url = "https://gitlab.com/#{path}"
-    else
-      self.repository_url = "https://github.com/#{path}"
+    # 1. SSH format: git@github.com:owner/repo(.git)
+    if url =~ %r{\Agit@(github|gitlab)\.com:([^/]+)/([^/\s]+?)(?:\.git)?\z}
+      host = Regexp.last_match(1)
+      owner = Regexp.last_match(2)
+      repo = Regexp.last_match(3)
+      self.repository_url = "https://#{host}.com/#{owner}/#{repo}"
+      return
     end
+
+    # 2. Standard HTTP/HTTPS or deep tree URL: (https://)(www.)github.com/owner/repo(...)
+    if url =~ %r{(?:https?://)?(?:www\.)?(github|gitlab)\.com/([^/\s]+)/([^/\s#?]+)}
+      host = Regexp.last_match(1)
+      owner = Regexp.last_match(2)
+      repo = Regexp.last_match(3).sub(/\.git\z/, '')
+      self.repository_url = "https://#{host}.com/#{owner}/#{repo}"
+      return
+    end
+
+    # 3. Simple owner/repo shorthand: owner/repo
+    if url =~ %r{\A([a-zA-Z0-9_.-]+)/([a-zA-Z0-9_.-]+?)(?:\.git)?\z}
+      self.repository_url = "https://github.com/#{Regexp.last_match(1)}/#{Regexp.last_match(2)}"
+      return
+    end
+
+    # 4. Fallback cleanup
+    clean_url = url.sub(%r{/+\z}, '').sub(/\.git\z/, '')
+    self.repository_url = clean_url
   end
 
   before_destroy :queue_resource_cleanup

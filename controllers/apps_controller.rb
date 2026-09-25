@@ -117,13 +117,23 @@ class AppsController < ApplicationController
           }.to_json
         else
           status 422
-          { errors: @app.errors.full_messages }.to_json
+          error_sentence = @app.errors.full_messages.to_sentence
+          {
+            status: 422,
+            error: error_sentence,
+            message: error_sentence,
+            errors: @app.errors.full_messages
+          }.to_json
         end
       end
     rescue StandardError => e
       warn "[AppsController#create] CRITICAL ERROR: #{e.message}"
       status 500
-      { error: "Failed to create application: #{e.message}" }.to_json
+      {
+        status: 500,
+        error: "Failed to create application: #{e.message}",
+        message: "Failed to create application: #{e.message}"
+      }.to_json
     end
 
     def update
@@ -140,7 +150,13 @@ class AppsController < ApplicationController
         AppSerializer.new(@app).serializable_hash.dig(:data, :attributes).to_json
       else
         status 422
-        { errors: @app.errors.full_messages }.to_json
+        error_sentence = @app.errors.full_messages.to_sentence
+        {
+          status: 422,
+          error: error_sentence,
+          message: error_sentence,
+          errors: @app.errors.full_messages
+        }.to_json
       end
     end
 
@@ -223,6 +239,7 @@ class AppsController < ApplicationController
         filtered[k] = source[k] if source.key?(k)
         filtered[k] = source[k.to_s] if source.key?(k.to_s)
       end
+      filtered[:build_pack] = 'docker_compose' if filtered[:build_pack] == 'docker-compose'
       filtered
     end
   end

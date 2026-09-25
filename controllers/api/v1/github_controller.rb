@@ -20,6 +20,9 @@ module Api
       get_action '/api/v1/github/callback', :callback do
         callback
       end
+      post_action '/api/v1/github/callback', :callback do
+        callback
+      end
 
       get_action '/api/v1/github/repositories', :repositories do
         repositories
@@ -34,7 +37,12 @@ module Api
           end
 
           begin
-            client = Octokit::Client.new(access_token: current_user.github_token)
+            client = Octokit::Client.new(
+              access_token: current_user.github_token,
+              connection_options: {
+                request: { timeout: 10, open_timeout: 5 }
+              }
+            )
             repos = client.repositories(nil, sort: 'updated', direction: 'desc', per_page: 100)
 
             repos.map do |r|
@@ -48,13 +56,13 @@ module Api
               }
             end.to_json
           rescue Octokit::Unauthorized
-            current_user.update(github_token: nil, github_username: nil)
+            current_user.update_columns(github_token: nil, github_username: nil)
             status 401
-            { error: 'GitHub session expired. Please reconnect.' }.to_json
+            { error: 'GitHub session expired. Please reconnect.', message: 'GitHub session expired. Please reconnect.' }.to_json
           rescue StandardError => e
             warn "[GithubController#repositories] Error: #{e.message}"
             status 500
-            { error: "Failed to fetch repositories: #{e.message}" }.to_json
+            { error: "Failed to fetch repositories: #{e.message}", message: "Failed to fetch repositories: #{e.message}" }.to_json
           end
         end
 
@@ -65,6 +73,27 @@ module Api
             return { error: 'Authentication required' }.to_json
           end
 
+          # Extract code from query params or JSON body
+          code = params[:code]
+          if code.blank? && request.body
+            begin
+              body_str = request.body.read
+              request.body.rewind if request.body.respond_to?(:rewind)
+              if body_str.present?
+                json_params = JSON.parse(body_str)
+                code ||= json_params['code'] || json_params[:code]
+              end
+            rescue StandardError => e
+              warn "[GithubController#connect] Body parsing error: #{e.message}"
+            end
+          end
+
+          # If authorization code is provided, exchange it directly
+          if code.present?
+            return exchange_and_connect(user, code)
+          end
+
+          # Otherwise, generate GitHub authorization URL
           client_id = ENV['GITHUB_CLIENT_ID'] || Rails.application.credentials.github_client_id
           if client_id.blank?
             warn '[GithubController#connect] GITHUB_CLIENT_ID is missing!'
@@ -112,38 +141,64 @@ module Api
           code = params[:code]
           state = params[:state]
 
-          begin
-            secret = ENV['JWT_SECRET_KEY'] || Rails.application.secret_key_base
-            decoded_state = JWT.decode(state, secret, true, { algorithm: 'HS256' })
-            state_payload = decoded_state[0]
-            user_id = state_payload['user_id']
-
-            expected_redirect_uri = params[:redirect_uri] || 'https://api.enkihost.com/api/v1/github/callback'
-            if state_payload['redirect_uri'] != expected_redirect_uri
-              status 401
-              return { error: 'CSRF protection: State validation failed - redirect_uri mismatch' }.to_json
+          if code.blank? && request.body
+            begin
+              body_str = request.body.read
+              request.body.rewind if request.body.respond_to?(:rewind)
+              if body_str.present?
+                json_params = JSON.parse(body_str)
+                code ||= json_params['code'] || json_params[:code]
+                state ||= json_params['state'] || json_params[:state]
+              end
+            rescue StandardError => e
+              warn "[GithubController#callback] Body parsing error: #{e.message}"
             end
-
-            user = User.find(user_id)
-          rescue JWT::ExpiredSignature
-            status 401
-            return { error: 'Invalid state: JWT expired' }.to_json
-          rescue StandardError => e
-            status 401
-            return { error: "Invalid state: #{e.message}" }.to_json
           end
 
+          user = current_user
+
+          if state.present?
+            begin
+              secret = ENV['JWT_SECRET_KEY'] || Rails.application.secret_key_base
+              decoded_state = JWT.decode(state, secret, true, { algorithm: 'HS256' })
+              state_payload = decoded_state[0]
+              user_id = state_payload['user_id']
+              user ||= User.find_by(id: user_id)
+            rescue StandardError => e
+              warn "[GithubController#callback] State decoding warning: #{e.message}"
+            end
+          end
+
+          unless user
+            status 401
+            return { error: 'User could not be authenticated from session or state' }.to_json
+          end
+
+          exchange_and_connect(user, code, is_callback: true)
+        end
+
+        def exchange_and_connect(user, code, is_callback: false)
           client_id = ENV['GITHUB_CLIENT_ID'] || Rails.application.credentials.github_client_id
           client_secret = ENV['GITHUB_CLIENT_SECRET'] || Rails.application.credentials.github_client_secret
+
+          if client_id.blank? || client_secret.blank?
+            status 500
+            return { error: 'GitHub configuration missing on server (GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET)' }.to_json
+          end
 
           begin
             response = Faraday.post('https://github.com/login/oauth/access_token', {
               client_id: client_id,
               client_secret: client_secret,
               code: code
-            }, { 'Accept' => 'application/json' })
+            }, {
+              'Accept' => 'application/json'
+            }) do |req|
+              req.options.timeout = 10
+              req.options.open_timeout = 5
+            end
 
-            data = JSON.parse(response.body)
+            data = JSON.parse(response.body) rescue {}
             access_token = data['access_token']
           rescue StandardError => e
             status 422
@@ -152,7 +207,12 @@ module Api
 
           if access_token.present?
             begin
-              client = Octokit::Client.new(access_token: access_token)
+              client = Octokit::Client.new(
+                access_token: access_token,
+                connection_options: {
+                  request: { timeout: 10, open_timeout: 5 }
+                }
+              )
               github_user = client.user
             rescue StandardError => e
               status 500
@@ -162,8 +222,24 @@ module Api
             user.update!(github_token: access_token, github_username: github_user.login, jti: User.generate_jti)
             new_token = generate_jwt_for(user)
 
-            frontend_url = ENV['FRONTEND_URL'] || 'https://enkihost.com'
-            redirect "#{frontend_url}/settings?github=connected&token=#{new_token}&auth_token=#{new_token}"
+            if is_callback && request.request_method == 'GET'
+              frontend_url = ENV['FRONTEND_URL'] || 'https://enkihost.com'
+              redirect "#{frontend_url}/dashboard/apps/new?step=2&github=connected&token=#{new_token}&auth_token=#{new_token}"
+            else
+              {
+                success: true,
+                message: 'GitHub connected successfully',
+                token: new_token,
+                auth_token: new_token,
+                user: {
+                  id: user.id,
+                  email: user.email,
+                  name: user.name,
+                  github_connected: true,
+                  github_username: user.github_username
+                }
+              }.to_json
+            end
           else
             status 422
             { error: 'Failed to obtain access token from GitHub', details: data }.to_json
