@@ -298,12 +298,48 @@ class App < ApplicationRecord
     self.repository_url = clean_url
   end
 
-  before_destroy :queue_resource_cleanup
+  before_destroy :cleanup_all_associated_resources
 
   private
 
-  def queue_resource_cleanup
-    # We pass ID and coolify_uuid since the record is about to be deleted
-    CleanupAppResourcesJob.perform_later(id, coolify_uuid)
+  def cleanup_all_associated_resources
+    target_id = id
+    target_coolify_uuid = coolify_uuid
+
+    Rails.logger.info "[App##{target_id}] Cleaning up all Docker containers and associated databases..."
+
+    # 1. Clean up all associated database/addon containers and volumes
+    addons.each do |addon|
+      begin
+        AddonService.new(addon).deprovision if defined?(AddonService)
+      rescue StandardError => e
+        warn "[App##{target_id}] Error cleaning up database addon #{addon.id}: #{e.message}"
+      end
+    end
+
+    # 2. Clean up all app Docker containers, volumes, and images
+    if defined?(DockerService)
+      begin
+        DockerService.cleanup_app_resources(target_id)
+      rescue StandardError => e
+        warn "[App##{target_id}] Error cleaning up app Docker containers: #{e.message}"
+      end
+    end
+
+    # 3. Clean up Coolify application if configured
+    if target_coolify_uuid.present? && defined?(CoolifyService)
+      begin
+        CoolifyService.new.delete_application(target_coolify_uuid)
+      rescue StandardError => e
+        warn "[App##{target_id}] Error deleting Coolify application #{target_coolify_uuid}: #{e.message}"
+      end
+    end
+
+    # 4. Also queue background job as redundancy
+    begin
+      CleanupAppResourcesJob.perform_later(target_id, target_coolify_uuid) if defined?(CleanupAppResourcesJob)
+    rescue StandardError => e
+      warn "[App##{target_id}] Could not enqueue CleanupAppResourcesJob: #{e.message}"
+    end
   end
 end

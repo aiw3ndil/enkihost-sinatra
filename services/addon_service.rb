@@ -18,25 +18,33 @@ class AddonService
 
   def deprovision
     container_name = "enkihost-addon-#{@addon.id}"
-    system("docker stop #{container_name}")
-    system("docker rm #{container_name}")
-    # In a real environment, we might want to handle volume deletion carefully
-    system("docker volume rm #{container_name}-data")
+    bin = docker_bin
+    Rails.logger.info "[AddonService] Deprovisioning database/addon container: #{container_name}"
+    system("#{bin} stop #{container_name} >/dev/null 2>&1")
+    system("#{bin} rm -f #{container_name} >/dev/null 2>&1")
+    system("#{bin} volume rm #{container_name}-data >/dev/null 2>&1")
   end
 
   def start
-    system("docker start enkihost-addon-#{@addon.id}")
+    bin = docker_bin
+    system("#{bin} start enkihost-addon-#{@addon.id} >/dev/null 2>&1")
   end
 
   def stop
-    system("docker stop enkihost-addon-#{@addon.id}")
+    bin = docker_bin
+    system("#{bin} stop enkihost-addon-#{@addon.id} >/dev/null 2>&1")
   end
 
   def restart
-    system("docker restart enkihost-addon-#{@addon.id}")
+    bin = docker_bin
+    system("#{bin} restart enkihost-addon-#{@addon.id} >/dev/null 2>&1")
   end
 
   private
+
+  def docker_bin
+    defined?(DockerService) ? DockerService.docker_bin : 'docker'
+  end
 
   def provision_postgresql
     password = SecureRandom.hex(16)

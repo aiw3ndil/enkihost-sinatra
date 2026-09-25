@@ -14,28 +14,13 @@ class CleanupAppResourcesJob < ApplicationJob
     end
 
     # 2. Cleanup Docker (Local)
-    # We find all containers matching the pattern enkihost-app-#{app_id}-*
-    # This ensures any dangling deployment containers are removed.
-    pattern = "enkihost-app-#{app_id}-"
-    Rails.logger.info "CleanupJob: Searching and deleting containers matching #{pattern}*"
-    
-    begin
-      # List all container IDs matching the name
-      stdout, stderr, status = Open3.capture3("docker ps -a --filter \"name=#{pattern}\" --format \"{{.Names}}\"")
-      if status.success?
-        container_names = stdout.split("\n")
-        container_names.each do |name|
-          # Doube check the name starts with our pattern for safety
-          if name.start_with?(pattern)
-            Rails.logger.info "CleanupJob: Removing container #{name}..."
-            DockerService.remove_container(name)
-          end
-        end
-      else
-        Rails.logger.error "CleanupJob: Error listing containers: #{stderr}"
+    # Uses DockerService.cleanup_app_resources to remove containers, volumes, and images
+    if defined?(DockerService)
+      begin
+        DockerService.cleanup_app_resources(app_id)
+      rescue => e
+        Rails.logger.error "CleanupJob: Docker error during cleanup: #{e.message}"
       end
-    rescue => e
-      Rails.logger.error "CleanupJob: Docker error during search: #{e.message}"
     end
   end
 end

@@ -43,17 +43,101 @@ class DockerService
     end
   end
 
+  def self.docker_bin
+    @docker_bin ||= begin
+      if ENV['DOCKER_BINARY'].present? && File.executable?(ENV['DOCKER_BINARY'])
+        return ENV['DOCKER_BINARY']
+      end
+
+      which_docker = `which docker`.strip rescue nil
+      if which_docker.present? && File.executable?(which_docker)
+        return which_docker
+      end
+
+      common_paths = [
+        "/usr/bin/docker",
+        "/usr/local/bin/docker",
+        "/bin/docker",
+        "/snap/bin/docker"
+      ]
+
+      found_path = common_paths.find { |path| File.executable?(path) }
+      return found_path if found_path
+
+      "docker"
+    end
+  end
+
   def self.remove_container(container_name)
     return if container_name.blank?
-    
-    Rails.logger.info "DOCKER: Stopping and removing container #{container_name}..."
-    system("#{docker_bin} stop #{container_name}")
-    system("#{docker_bin} rm #{container_name}")
+
+    bin = docker_bin
+    Rails.logger.info "DOCKER: Forcefully stopping and removing container #{container_name}..."
+    system("#{bin} stop #{container_name} >/dev/null 2>&1")
+    system("#{bin} rm -f #{container_name} >/dev/null 2>&1")
+
     # Also remove the named volume associated with the app if it was a default one
-    # Custom storages are usually intended to persist, so we don't auto-remove them here
     app_id = container_name.match(/enkihost-app-(\d+)/)&.captures&.first
     if app_id
-      system("#{docker_bin} volume rm enkihost-app-#{app_id}-data") rescue nil
+      system("#{bin} volume rm enkihost-app-#{app_id}-data >/dev/null 2>&1") rescue nil
+    end
+  end
+
+  def self.cleanup_app_resources(app_id)
+    return if app_id.blank?
+
+    bin = docker_bin
+    prefix = "enkihost-app-#{app_id}-"
+    Rails.logger.info "[DockerService] Starting comprehensive Docker container cleanup for app #{app_id}..."
+
+    # 1. Stop and remove all app deployment containers by name prefix
+    begin
+      out, _err, st = Open3.capture3("#{bin} ps -a --filter \"name=#{prefix}\" --format \"{{.Names}}\"")
+      if st.success?
+        containers = out.split("\n").map(&:strip).reject(&:blank?)
+        containers.each do |c_name|
+          if c_name.start_with?(prefix)
+            Rails.logger.info "[DockerService] Removing app container: #{c_name}"
+            system("#{bin} rm -f #{c_name} >/dev/null 2>&1")
+          end
+        end
+      end
+    rescue StandardError => e
+      warn "[DockerService] Error removing app containers by name: #{e.message}"
+    end
+
+    # 2. Stop and remove any containers by label (enkihost.app_id=#{app_id})
+    begin
+      out, _err, st = Open3.capture3("#{bin} ps -a --filter \"label=enkihost.app_id=#{app_id}\" --format \"{{.ID}}\"")
+      if st.success?
+        ids = out.split("\n").map(&:strip).reject(&:blank?)
+        ids.each do |c_id|
+          Rails.logger.info "[DockerService] Removing labeled app container: #{c_id}"
+          system("#{bin} rm -f #{c_id} >/dev/null 2>&1")
+        end
+      end
+    rescue StandardError => e
+      warn "[DockerService] Error removing containers by label: #{e.message}"
+    end
+
+    # 3. Remove app default volume
+    begin
+      system("#{bin} volume rm enkihost-app-#{app_id}-data >/dev/null 2>&1")
+    rescue StandardError => e
+      warn "[DockerService] Error removing app volume: #{e.message}"
+    end
+
+    # 4. Remove Docker build images for this app (enkihost-#{app_id}-*)
+    begin
+      out, _err, st = Open3.capture3("#{bin} images --filter \"reference=enkihost-#{app_id}-*\" --format \"{{.ID}}\"")
+      if st.success?
+        img_ids = out.split("\n").map(&:strip).reject(&:blank?)
+        img_ids.each do |img_id|
+          system("#{bin} rmi -f #{img_id} >/dev/null 2>&1")
+        end
+      end
+    rescue StandardError => e
+      warn "[DockerService] Error removing app images: #{e.message}"
     end
   end
 
@@ -360,37 +444,7 @@ class DockerService
   end
 
   def docker_bin
-    @docker_bin ||= begin
-      # 1. Check environment variable
-      if ENV['DOCKER_BINARY'].present? && File.executable?(ENV['DOCKER_BINARY'])
-        return ENV['DOCKER_BINARY']
-      end
-      
-      # 2. Try to find it using 'which'
-      which_docker = `which docker`.strip rescue nil
-      if which_docker.present? && File.executable?(which_docker)
-        return which_docker
-      end
-      
-      # 3. Try common paths
-      common_paths = [
-        "/usr/bin/docker",
-        "/usr/local/bin/docker",
-        "/bin/docker",
-        "/snap/bin/docker"
-      ]
-      
-      found_path = common_paths.find { |path| File.executable?(path) }
-      return found_path if found_path
-      
-      # 4. If still not found, log the PATH and raise a descriptive error
-      log("ERROR: 'docker' executable not found in PATH or common locations.")
-      log("Current PATH: #{ENV['PATH']}")
-      log("Searched in: #{common_paths.join(', ')}")
-      
-      # Fallback to 'docker' and let it fail with a standard error if all else fails
-      "docker"
-    end
+    self.class.docker_bin
   end
 
   # Templates for Dockerfiles

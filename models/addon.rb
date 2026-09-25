@@ -44,18 +44,16 @@ class Addon < ApplicationRecord
   delegate :user, to: :app, allow_nil: true
 
   before_validation :set_default_status, on: :create
-  after_destroy :cleanup_addon
+  before_destroy :cleanup_addon
 
   private
 
   def cleanup_addon
-    Thread.new do
+    if defined?(AddonService)
       begin
         AddonService.new(self).deprovision
       rescue StandardError => e
-        Rails.logger.error "ERROR during addon cleanup for addon #{id}: #{e.message}"
-      ensure
-        ActiveRecord::Base.connection_pool.release_connection
+        warn "[Addon##{id}] Error during database deprovision: #{e.message}"
       end
     end
   end

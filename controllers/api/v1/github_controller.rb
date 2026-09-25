@@ -73,19 +73,26 @@ module Api
             return { error: 'Authentication required' }.to_json
           end
 
-          # Extract code from query params or JSON body
+          # Extract code or personal token from query params or JSON body
           code = params[:code]
-          if code.blank? && request.body
+          token_param = params[:personal_access_token] || params[:token]
+          if (code.blank? && token_param.blank?) && request.body
             begin
               body_str = request.body.read
               request.body.rewind if request.body.respond_to?(:rewind)
               if body_str.present?
                 json_params = JSON.parse(body_str)
                 code ||= json_params['code'] || json_params[:code]
+                token_param ||= json_params['personal_access_token'] || json_params[:personal_access_token] || json_params['token'] || json_params[:token]
               end
             rescue StandardError => e
               warn "[GithubController#connect] Body parsing error: #{e.message}"
             end
+          end
+
+          # If Personal Access Token provided, connect immediately
+          if token_param.present?
+            return connect_with_token(user, token_param)
           end
 
           # If authorization code is provided, exchange it directly
@@ -242,8 +249,63 @@ module Api
             end
           else
             status 422
-            { error: 'Failed to obtain access token from GitHub', details: data }.to_json
+            error_reason = data['error_description'] || data['error'] || 'Unknown error'
+            warn "[GithubController#exchange_and_connect] GitHub OAuth exchange failed: #{data.inspect}"
+            {
+              error: "Failed to obtain access token from GitHub: #{error_reason}",
+              message: "Failed to obtain access token from GitHub: #{error_reason}",
+              details: data
+            }.to_json
           end
+        end
+
+        def connect_with_token(user, pat_token)
+          token = pat_token.to_s.strip
+          if token.blank?
+            status 422
+            return { error: 'GitHub token cannot be blank' }.to_json
+          end
+
+          begin
+            client = Octokit::Client.new(
+              access_token: token,
+              connection_options: { request: { timeout: 10, open_timeout: 5 } }
+            )
+            github_user = client.user
+          rescue Octokit::Unauthorized
+            status 401
+            return { error: 'Invalid GitHub Personal Access Token. Please check token permissions.' }.to_json
+          rescue StandardError => e
+            status 500
+            return { error: "Failed to verify GitHub token: #{e.message}" }.to_json
+          end
+
+          new_jti = User.generate_jti
+          user.update_columns(github_token: token, github_username: github_user.login, jti: new_jti)
+          user.jti = new_jti
+          user.github_token = token
+          user.github_username = github_user.login
+
+          new_token = generate_jwt_for(user)
+
+          headers['Authorization'] = "Bearer #{new_token}"
+          status 200
+          {
+            status: 200,
+            success: true,
+            message: 'GitHub connected successfully',
+            github_connected: true,
+            github_username: github_user.login,
+            token: new_token,
+            auth_token: new_token,
+            user: {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              github_connected: true,
+              github_username: github_user.login
+            }
+          }.to_json
         end
       end
     end
