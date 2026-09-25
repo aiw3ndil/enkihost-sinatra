@@ -17,6 +17,12 @@ class DockerService
 
   def run_container
     assign_port if @app.port.blank?
+    if @app.user.present?
+      @app.update(
+        cpu_limit: @app.user.limits[:cpu_limit],
+        memory_limit: @app.user.limits[:memory_limit]
+      )
+    end
     start_new_container
     stop_old_container
   ensure
