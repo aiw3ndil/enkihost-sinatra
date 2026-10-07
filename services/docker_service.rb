@@ -256,29 +256,30 @@ class DockerService
       env_args += ["-e", "RAILS_ENV=production", "-e", "RACK_ENV=production"]
     end
 
-    # Addon environment variables. Variables defined by the user take precedence,
-    # and an addon without a URL must never override them with an empty value.
-    user_keys = @app.environment_variables.map(&:key)
+    # Ensure network exists - we use 'coolify' to match the existing proxy on this server
+    system("#{docker_bin} network create #{proxy_network}") rescue nil
+
+    # Addon environment variables. A running addon's URL wins over a user-defined
+    # variable (it is appended last, and docker keeps the last -e for a key), but an
+    # addon without a URL must never override the user's value with an empty one.
     @app.addons.running.each do |addon|
       env_key = { 'postgresql' => 'DATABASE_URL', 'redis' => 'REDIS_URL' }[addon.kind]
       next if env_key.nil?
 
-      if user_keys.include?(env_key)
-        log("#{env_key} defined in app environment variables; not overriding it with addon #{addon.id}")
-        next
-      end
-
       url = addon.config['url']
       if url.blank?
-        log("WARNING: addon #{addon.id} (#{addon.kind}) has no URL in its config; #{env_key} not set")
+        log("WARNING: addon #{addon.id} (#{addon.kind}) has no URL in its config; #{env_key} not set from addon")
         next
       end
 
+      # The app must share a network with the addon to resolve its hostname. Addons
+      # provisioned without COOLIFY_TOKEN live on 'enkihost-proxy' instead of 'coolify'.
+      addon_container = addon.config['host'].presence || "enkihost-addon-#{addon.id}"
+      system("#{docker_bin} network connect #{proxy_network} #{addon_container} >/dev/null 2>&1")
+
+      log("#{env_key} set from addon #{addon.id} (host: #{addon_container})")
       env_args += ["-e", "#{env_key}=#{url}"]
     end
-
-    # Ensure network exists - we use 'coolify' to match the existing proxy on this server
-    system("#{docker_bin} network create #{proxy_network}") rescue nil
 
     # Build full docker run command as array
     cmd_args = [
