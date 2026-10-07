@@ -390,20 +390,13 @@ class DockerService
     
     File.write(File.join(@build_path, 'Dockerfile'), dockerfile_content)
     log("Generated Dockerfile for #{@app.kind}")
-
-    dockerignore_path = File.join(@build_path, '.dockerignore')
-    unless File.exist?(dockerignore_path)
-      File.write(dockerignore_path, default_dockerignore)
-      log("Generated default .dockerignore")
-    end
   end
 
   def build_image
     image_tag = "enkihost-#{@app.id}-#{@deployment.id}"
     log("Building Docker image: #{image_tag}...")
     
-    # BuildKit: reutiliza capas de builds anteriores y permite cache mounts (gemas)
-    system_cmd_array([docker_bin, "build", "--progress=plain", "-t", image_tag, "."], { "DOCKER_BUILDKIT" => "1" })
+    system_cmd_array([docker_bin, "build", "-t", image_tag, "."])
     log("Docker image built successfully: #{image_tag}")
   end
 
@@ -471,40 +464,17 @@ class DockerService
     self.class.docker_bin
   end
 
-  # Las gemas se instalan en un cache mount persistente por app, así un cambio en
-  # Gemfile.lock solo instala las gemas nuevas. Se copian a /gems porque el
-  # contenido de un cache mount no forma parte de la imagen final.
-  def bundle_install_step
-    <<~STEP.chomp
-      ENV BUNDLE_PATH=/gems
-      RUN --mount=type=cache,id=enkihost-bundle-#{@app.id},target=/bundle-cache,sharing=locked \\
-          BUNDLE_PATH=/bundle-cache bundle install --jobs 4 --retry 3 && \\
-          BUNDLE_PATH=/bundle-cache bundle clean --force && \\
-          mkdir -p /gems && cp -a /bundle-cache/. /gems/
-    STEP
-  end
-
-  def default_dockerignore
-    <<~IGNORE
-      .git
-      log/*
-      tmp/*
-      node_modules
-      .env
-    IGNORE
-  end
-
   # Templates for Dockerfiles
   def rails_dockerfile
     <<~DOCKERFILE
       FROM ruby:3.3.10-slim
       RUN apt-get update -qq && apt-get install -y build-essential libpq-dev nodejs libyaml-dev
       WORKDIR /rails
-      COPY Gemfile* ./
-      #{bundle_install_step}
+      COPY Gemfile Gemfile.lock ./
+      RUN bundle install
       COPY . .
       EXPOSE 3000
-      CMD ["bundle", "exec", "rails", "server", "-b", "0.0.0.0"]
+      CMD ["rails", "server", "-b", "0.0.0.0"]
     DOCKERFILE
   end
 
@@ -514,7 +484,7 @@ class DockerService
       RUN apt-get update -qq && apt-get install -y build-essential libyaml-dev libpq-dev
       WORKDIR /app
       COPY Gemfile* ./
-      #{bundle_install_step}
+      RUN bundle install
       COPY . .
       EXPOSE 4567
       CMD ["bundle", "exec", "puma", "-C", "config/puma.rb"]
@@ -527,7 +497,7 @@ class DockerService
       RUN apt-get update -qq && apt-get install -y build-essential libyaml-dev
       WORKDIR /rails
       COPY Gemfile* ./
-      #{bundle_install_step}
+      RUN bundle install
       COPY . .
       RUN bundle exec jekyll build
 

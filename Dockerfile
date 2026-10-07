@@ -54,7 +54,7 @@ RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
     && apt-get update -qq \
-    && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin \
+    && apt-get install -y --no-install-recommends docker-ce-cli \
     && apt-get purge -y gnupg lsb-release \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*

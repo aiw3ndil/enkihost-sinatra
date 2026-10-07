@@ -50,11 +50,8 @@ class CoolifyService
     sync_storages(app, deployment)
     
     # 4. Disparar el despliegue real
-    # force: true desactiva la caché de capas de Docker y reconstruye todo desde cero.
-    # Por defecto reutilizamos la caché; COOLIFY_FORCE_REBUILD=true para forzar un build limpio.
-    force_rebuild = ENV['COOLIFY_FORCE_REBUILD'] == 'true'
-    log(deployment, "Triggering deployment#{' (force rebuild, no cache)' if force_rebuild}...")
-    deploy_response = @conn.post("deploy", { uuid: coolify_uuid, force: force_rebuild })
+    log(deployment, "Triggering deployment...")
+    deploy_response = @conn.post("deploy", { uuid: coolify_uuid, force: true })
     
     if deploy_response.success?
       body = deploy_response.body
