@@ -256,14 +256,25 @@ class DockerService
       env_args += ["-e", "RAILS_ENV=production", "-e", "RACK_ENV=production"]
     end
 
-    # Addon environment variables
+    # Addon environment variables. Variables defined by the user take precedence,
+    # and an addon without a URL must never override them with an empty value.
+    user_keys = @app.environment_variables.map(&:key)
     @app.addons.running.each do |addon|
-      case addon.kind
-      when 'postgresql'
-        env_args += ["-e", "DATABASE_URL=#{addon.config['url']}"]
-      when 'redis'
-        env_args += ["-e", "REDIS_URL=#{addon.config['url']}"]
+      env_key = { 'postgresql' => 'DATABASE_URL', 'redis' => 'REDIS_URL' }[addon.kind]
+      next if env_key.nil?
+
+      if user_keys.include?(env_key)
+        log("#{env_key} defined in app environment variables; not overriding it with addon #{addon.id}")
+        next
       end
+
+      url = addon.config['url']
+      if url.blank?
+        log("WARNING: addon #{addon.id} (#{addon.kind}) has no URL in its config; #{env_key} not set")
+        next
+      end
+
+      env_args += ["-e", "#{env_key}=#{url}"]
     end
 
     # Ensure network exists - we use 'coolify' to match the existing proxy on this server
