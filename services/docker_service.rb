@@ -327,32 +327,50 @@ class DockerService
     log("Container #{container_name} started and healthy! Access it at http://#{domain}")
   end
 
+  STARTUP_TIMEOUT = 60      # seconds to wait for the container to reach 'running'
+  STABILITY_WINDOW = 25     # seconds it must then stay running without restarting
+
+  # A container that crashes on boot is 'running' for a moment before restarting, so
+  # we require it to stay up for STABILITY_WINDOW seconds. Otherwise the deployment
+  # fails with the container logs, and the previous container is left untouched.
   def wait_for_readiness(container_name)
     log("Waiting for container #{container_name} to be ready...")
-    
-    max_retries = 30
-    retries = 0
-    
+
+    deadline = Time.current + STARTUP_TIMEOUT
+    running_since = nil
+
     loop do
-      # Check if container is running
-      is_running = `#{docker_bin} inspect -f '{{.State.Running}}' #{container_name}`.strip == 'true' rescue false
-      
-      if is_running
-        log("Container is running.")
-        break
+      status, restarts = `#{docker_bin} inspect -f '{{.State.Status}} {{.RestartCount}}' #{container_name} 2>/dev/null`.strip.split(' ')
+
+      if status == 'running' && restarts.to_i.zero?
+        running_since ||= Time.current
+        if Time.current - running_since >= STABILITY_WINDOW
+          log("Container has been running for #{STABILITY_WINDOW}s without restarts.")
+          break
+        end
+      elsif restarts.to_i.positive? || %w[restarting exited dead].include?(status)
+        fail_readiness(container_name, "Container crashed during startup (status: #{status || 'unknown'}, restarts: #{restarts.to_i})")
+      elsif Time.current > deadline
+        fail_readiness(container_name, "Container did not start within #{STARTUP_TIMEOUT}s (status: #{status || 'unknown'})")
       end
-      
-      retries += 1
-      if retries >= max_retries
-        log("ERROR: Container failed to become ready after 30 seconds.")
-        # If the container didn't start, we should probably stop it and raise error
-        system("#{docker_bin} stop #{container_name}") rescue nil
-        system("#{docker_bin} rm #{container_name}") rescue nil
-        raise "Container readiness timeout"
-      end
-      
+
       sleep 1
     end
+  end
+
+  def fail_readiness(container_name, reason)
+    log("ERROR: #{reason}. Last container logs:")
+    container_logs, _status = Open3.capture2e(docker_bin, "logs", "--tail", "40", container_name)
+    log(sanitize_message(container_logs.presence || "(no logs)"))
+
+    system("#{docker_bin} rm -f #{container_name} >/dev/null 2>&1")
+    raise reason
+  end
+
+  def force_rebuild?
+    return true if ENV['FORCE_REBUILD'] == 'true'
+
+    @app.environment_variables.any? { |ev| ev.key == 'ENKIHOST_FORCE_REBUILD' && ev.value.to_s.downcase == 'true' }
   end
 
   def prepare_build_directory
@@ -400,9 +418,18 @@ class DockerService
 
   def build_image
     image_tag = "enkihost-#{@app.id}-#{@deployment.id}"
-    log("Building Docker image: #{image_tag}...")
-    
-    system_cmd_array([docker_bin, "build", "-t", image_tag, "."])
+    cmd = [docker_bin, "build", "-t", image_tag, "."]
+
+    # Docker reuses cached layers by default. A clean rebuild can be forced platform-wide
+    # (FORCE_REBUILD=true) or per app (ENKIHOST_FORCE_REBUILD=true env variable).
+    if force_rebuild?
+      cmd.insert(2, "--no-cache", "--pull")
+      log("Building Docker image: #{image_tag} (force rebuild, no cache)...")
+    else
+      log("Building Docker image: #{image_tag}...")
+    end
+
+    system_cmd_array(cmd)
     log("Docker image built successfully: #{image_tag}")
   end
 
