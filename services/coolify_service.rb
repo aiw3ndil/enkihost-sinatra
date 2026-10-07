@@ -293,7 +293,7 @@ class CoolifyService
       vars << { key: 'PORT', value: '3000' }
       vars << { key: 'RAILS_ENV', value: 'production' }
     end
-    app.environment_variables.each { |ev| vars << { key: ev.key, value: ev.value } }
+    app.environment_variables.each { |ev| vars << { key: ev.key, value: ev.value } unless ev.value.nil? }
     vars
   end
 

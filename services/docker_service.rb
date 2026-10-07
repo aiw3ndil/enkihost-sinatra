@@ -247,9 +247,14 @@ class DockerService
     end
 
     # Environment variables
-    env_args = @app.environment_variables.map do |ev|
-      ["-e", "#{ev.key}=#{ev.value}"]
-    end.flatten
+    env_args = @app.environment_variables.flat_map do |ev|
+      value = ev.value
+      if value.nil?
+        log("WARNING: environment variable #{ev.key} could not be decrypted; not set. Re-save it in the app settings.")
+        next []
+      end
+      ["-e", "#{ev.key}=#{value}"]
+    end
 
     # Force production mode for Rails/Sinatra to ensure they use fixed DATABASE_URL
     if %w[rails sinatra].include?(@app.kind)
