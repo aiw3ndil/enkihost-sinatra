@@ -343,29 +343,47 @@ class DockerService
   end
 
   STARTUP_TIMEOUT = 60      # seconds to wait for the container to reach 'running'
-  STABILITY_WINDOW = 25     # seconds it must then stay running without restarting
+  STABILITY_WINDOW = 25     # fallback: seconds it must stay running when it cannot be probed
+  BOOT_TIMEOUT = 300        # seconds a reachable container may take to answer HTTP (migrations, etc.)
+  BOOT_LOG_INTERVAL = 30    # seconds between "still booting" log lines
 
-  # The container is ready as soon as it answers HTTP on its internal port. A container
-  # that crashes on boot is 'running' for a moment before restarting, so if the probe
-  # cannot reach it (e.g. the worker is not on the proxy network) we fall back to
-  # requiring it to stay up for STABILITY_WINDOW seconds. Otherwise the deployment
-  # fails with the container logs, and the previous container is left untouched.
+  # The container is ready as soon as it answers HTTP on its internal port, and the
+  # deployment fails if it crashes first (a crashing container is 'running' for a moment
+  # before restarting). While it is reachable but not answering yet (e.g. running long
+  # migrations) we keep waiting up to BOOT_TIMEOUT, so the previous container is never
+  # removed before the new one has booted. Only when the probe cannot reach the container
+  # at all (e.g. the worker is not on the proxy network) do we fall back to requiring it
+  # to stay up for STABILITY_WINDOW seconds. On failure the previous container is left
+  # untouched.
   def wait_for_readiness(container_name, network, port)
     log("Waiting for container #{container_name} to be ready...")
 
     deadline = Time.current + STARTUP_TIMEOUT
     running_since = nil
+    reachable = false
+    last_boot_log = nil
 
     loop do
       status, restarts = `#{docker_bin} inspect -f '{{.State.Status}} {{.RestartCount}}' #{container_name} 2>/dev/null`.strip.split(' ')
 
       if status == 'running' && restarts.to_i.zero?
         running_since ||= Time.current
-        if http_responding?(container_name, network, port)
-          log("Container is answering HTTP on port #{port} after #{(Time.current - running_since).round}s.")
+        elapsed = (Time.current - running_since).round
+        probe = probe_http(container_name, network, port)
+        reachable ||= probe != :unreachable
+
+        if probe == :ok
+          log("Container is answering HTTP on port #{port} after #{elapsed}s.")
           break
-        elsif Time.current - running_since >= STABILITY_WINDOW
-          log("Container has been running for #{STABILITY_WINDOW}s without restarts.")
+        elsif reachable
+          if elapsed >= BOOT_TIMEOUT
+            fail_readiness(container_name, "Container did not answer HTTP on port #{port} within #{BOOT_TIMEOUT}s")
+          elsif last_boot_log.nil? || Time.current - last_boot_log >= BOOT_LOG_INTERVAL
+            log("Container is running but not answering HTTP on port #{port} yet (#{elapsed}s)...") if elapsed.positive?
+            last_boot_log = Time.current
+          end
+        elsif elapsed >= STABILITY_WINDOW
+          log("Container could not be probed over HTTP; it has been running for #{STABILITY_WINDOW}s without restarts.")
           break
         end
       elsif restarts.to_i.positive? || %w[restarting exited dead].include?(status)
@@ -378,15 +396,19 @@ class DockerService
     end
   end
 
-  # Any HTTP response (including redirects and errors) means the server has booted.
-  def http_responding?(container_name, network, port)
+  # :ok        - any HTTP response (including redirects and errors): the server has booted
+  # :booting   - the container is reachable but nothing answers yet (refused or no reply)
+  # :unreachable - the container has no address on the network or cannot be routed to
+  def probe_http(container_name, network, port)
     ip = `#{docker_bin} inspect -f '{{with index .NetworkSettings.Networks "#{network}"}}{{.IPAddress}}{{end}}' #{container_name} 2>/dev/null`.strip
-    return false if ip.blank?
+    return :unreachable if ip.blank?
 
     Net::HTTP.start(ip, port, open_timeout: 1, read_timeout: 2) { |http| http.head('/') }
-    true
+    :ok
+  rescue Errno::ECONNREFUSED, Errno::ECONNRESET, EOFError, Net::ReadTimeout
+    :booting
   rescue StandardError
-    false
+    :unreachable
   end
 
   def fail_readiness(container_name, reason)
