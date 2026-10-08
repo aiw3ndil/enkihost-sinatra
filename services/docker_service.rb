@@ -1,5 +1,6 @@
 require 'open3'
 require 'shellwords'
+require 'net/http'
 
 class DockerService
   def initialize(deployment)
@@ -336,18 +337,20 @@ class DockerService
     # Log command without tokens (env vars already sanitized in system_cmd logs)
     system_cmd_array(cmd_args)
     
-    wait_for_readiness(container_name)
-    
+    wait_for_readiness(container_name, proxy_network, internal_port)
+
     log("Container #{container_name} started and healthy! Access it at http://#{domain}")
   end
 
   STARTUP_TIMEOUT = 60      # seconds to wait for the container to reach 'running'
   STABILITY_WINDOW = 25     # seconds it must then stay running without restarting
 
-  # A container that crashes on boot is 'running' for a moment before restarting, so
-  # we require it to stay up for STABILITY_WINDOW seconds. Otherwise the deployment
+  # The container is ready as soon as it answers HTTP on its internal port. A container
+  # that crashes on boot is 'running' for a moment before restarting, so if the probe
+  # cannot reach it (e.g. the worker is not on the proxy network) we fall back to
+  # requiring it to stay up for STABILITY_WINDOW seconds. Otherwise the deployment
   # fails with the container logs, and the previous container is left untouched.
-  def wait_for_readiness(container_name)
+  def wait_for_readiness(container_name, network, port)
     log("Waiting for container #{container_name} to be ready...")
 
     deadline = Time.current + STARTUP_TIMEOUT
@@ -358,7 +361,10 @@ class DockerService
 
       if status == 'running' && restarts.to_i.zero?
         running_since ||= Time.current
-        if Time.current - running_since >= STABILITY_WINDOW
+        if http_responding?(container_name, network, port)
+          log("Container is answering HTTP on port #{port} after #{(Time.current - running_since).round}s.")
+          break
+        elsif Time.current - running_since >= STABILITY_WINDOW
           log("Container has been running for #{STABILITY_WINDOW}s without restarts.")
           break
         end
@@ -370,6 +376,17 @@ class DockerService
 
       sleep 1
     end
+  end
+
+  # Any HTTP response (including redirects and errors) means the server has booted.
+  def http_responding?(container_name, network, port)
+    ip = `#{docker_bin} inspect -f '{{with index .NetworkSettings.Networks "#{network}"}}{{.IPAddress}}{{end}}' #{container_name} 2>/dev/null`.strip
+    return false if ip.blank?
+
+    Net::HTTP.start(ip, port, open_timeout: 1, read_timeout: 2) { |http| http.head('/') }
+    true
+  rescue StandardError
+    false
   end
 
   def fail_readiness(container_name, reason)

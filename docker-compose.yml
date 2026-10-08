@@ -81,8 +81,10 @@ services:
           memory: 512M
     environment:
       <<: *env
+    # coolify-proxy lets deployments probe app containers over HTTP for readiness
     networks:
       - enkihost-network
+      - coolify-proxy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: always
