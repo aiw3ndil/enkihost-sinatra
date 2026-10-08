@@ -23,10 +23,38 @@ class DeploymentsController < ApplicationController
   end
 
   helpers do
+    DEFAULT_PER_PAGE = 10
+    MAX_PER_PAGE = 100
+
+    # Without ?page the full list is returned as a plain array (legacy clients). With
+    # ?page it returns one page plus pagination meta and the app's latest deployment,
+    # which clients need regardless of the page being shown.
     def index
       set_app
-      @deployments = @app.deployments.order(created_at: :desc)
-      DeploymentSerializer.new(@deployments).serializable_hash[:data].map { |d| d[:attributes] }.to_json
+      scope = @app.deployments.order(created_at: :desc, id: :desc)
+      return serialize_deployments(scope).to_json if params[:page].blank?
+
+      per_page = params[:per_page].to_i.clamp(1, MAX_PER_PAGE)
+      per_page = DEFAULT_PER_PAGE if params[:per_page].blank?
+      total = scope.count
+      total_pages = [(total / per_page.to_f).ceil, 1].max
+      page = params[:page].to_i.clamp(1, total_pages)
+      latest = scope.first
+
+      {
+        deployments: serialize_deployments(scope.offset((page - 1) * per_page).limit(per_page)),
+        meta: {
+          page: page,
+          per_page: per_page,
+          total: total,
+          total_pages: total_pages,
+          latest: latest && DeploymentSerializer.new(latest).serializable_hash.dig(:data, :attributes)
+        }
+      }.to_json
+    end
+
+    def serialize_deployments(deployments)
+      DeploymentSerializer.new(deployments).serializable_hash[:data].map { |d| d[:attributes] }
     end
 
     def show
