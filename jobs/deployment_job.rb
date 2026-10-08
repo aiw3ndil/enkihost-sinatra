@@ -5,7 +5,7 @@ class DeploymentJob < ApplicationJob
     deployment = Deployment.find_by(id: deployment_id)&.reload
     return unless deployment&.queued?
 
-    deployment.update!(status: :building, log: "Starting REAL deployment for #{deployment.app.name}...\n")
+    deployment.update!(status: :building, started_at: Time.current, finished_at: nil, log: "Starting REAL deployment for #{deployment.app.name}...\n")
     broadcast_status(deployment)
     log_update(deployment, "Status updated to building. Checking for COOLIFY_TOKEN...")
     
@@ -75,7 +75,7 @@ class DeploymentJob < ApplicationJob
 
             if %w[finished success completed].include?(status)
               log_update(deployment, "Coolify reports SUCCESS. Finalizing deployment...")
-              deployment.update!(status: :success)
+              deployment.update!(status: :success, finished_at: Time.current)
               broadcast_status(deployment) # Update UI immediately
               success = true
               break
@@ -130,7 +130,7 @@ class DeploymentJob < ApplicationJob
         docker_service = DockerService.new(deployment)
         docker_service.build
         docker_service.run_container
-        deployment.update!(status: :success)
+        deployment.update!(status: :success, finished_at: Time.current)
       end
 
       deployment.app.update!(runtime_status: :running)
@@ -150,7 +150,7 @@ class DeploymentJob < ApplicationJob
 
     rescue StandardError => e
       log_update(deployment, "ERROR during deployment: #{e.message}")
-      deployment.update!(status: :failed)
+      deployment.update!(status: :failed, finished_at: Time.current)
       broadcast_status(deployment)
       if defined?(DeploymentMailer)
         begin
