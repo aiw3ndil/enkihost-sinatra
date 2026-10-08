@@ -139,10 +139,10 @@ class TerminalWebsocketHandler
           if rs
             begin
               chunk = @master.readpartial(4096)
-              ws.send({ identifier: @identifier, message: { data: chunk } }.to_json)
+              send_from_thread(ws, { identifier: @identifier, message: { data: chunk } }.to_json)
             rescue EOFError, Errno::EIO
-              ws.send({ identifier: @identifier, message: { data: "\r\n\x1b[33mTerminal session closed.\x1b[0m\r\n" } }.to_json)
-              ws.close rescue nil
+              send_from_thread(ws, { identifier: @identifier, message: { data: "\r\n\x1b[33mTerminal session closed.\x1b[0m\r\n" } }.to_json)
+              close_from_thread(ws)
               break
             end
           end
@@ -151,8 +151,8 @@ class TerminalWebsocketHandler
           begin
             Process.getpgid(@pid)
           rescue Errno::ESRCH
-            ws.send({ identifier: @identifier, message: { data: "\r\n\x1b[33mProcess exited.\x1b[0m\r\n" } }.to_json)
-            ws.close rescue nil
+            send_from_thread(ws, { identifier: @identifier, message: { data: "\r\n\x1b[33mProcess exited.\x1b[0m\r\n" } }.to_json)
+            close_from_thread(ws)
             break
           end
         end
@@ -183,6 +183,17 @@ class TerminalWebsocketHandler
     when 'receive'
       # Handle resize event if needed
     end
+  end
+
+  # faye-websocket runs on the EventMachine reactor; calling ws.send from another
+  # thread only queues the data until the reactor next wakes (e.g. the next
+  # keystroke), so output lags. EM.schedule is thread-safe and wakes the reactor.
+  def send_from_thread(ws, payload)
+    EM.schedule { ws.send(payload) }
+  end
+
+  def close_from_thread(ws)
+    EM.schedule { ws.close rescue nil }
   end
 
   def handle_close
