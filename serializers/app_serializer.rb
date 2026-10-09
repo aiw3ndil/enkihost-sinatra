@@ -4,6 +4,10 @@ class AppSerializer
              :port, :cpu_limit, :memory_limit, :runtime_status, :coolify_uuid, :webhook_url, :webhook_secret,
              :last_deployment_status, :created_at, :updated_at
 
+  attribute :domains do |object|
+    object.hostnames
+  end
+
   attribute :user_plan do |object|
     object.user.plan
   end

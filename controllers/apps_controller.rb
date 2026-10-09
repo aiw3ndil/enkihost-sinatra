@@ -78,7 +78,7 @@ class AppsController < ApplicationController
 
   helpers do
     def index
-      @apps = current_user.apps.includes(:latest_deployment, :user)
+      @apps = current_user.apps.includes(:latest_deployment, :user, :domains)
       json_data = AppSerializer.new(@apps).serializable_hash[:data]
       if json_data.is_a?(Array)
         json_data.map { |app| app[:attributes] }.to_json

@@ -77,6 +77,14 @@ class App < ApplicationRecord
     "https://api.enkihost.com/api/v1/apps/#{id}/webhook?secret=#{webhook_secret}"
   end
 
+  # Hosts the app is served on: its domain records, oldest first. The default subdomain
+  # is only a fallback for apps whose domains were all removed, so a deleted default
+  # domain stops being routed.
+  def hostnames
+    fqdns = domains.sort_by(&:id).map(&:fqdn)
+    fqdns.presence || ["#{subdomain}.enkihost.com"]
+  end
+
   def last_deployment_status
     latest_deployment&.status || 'never_deployed'
   end

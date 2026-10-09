@@ -260,8 +260,11 @@ class DockerService
   end
 
   def routed_domains
-    base_domain = !Rails.env.production? ? "localhost" : "enkihost.com"
-    ["#{@app.subdomain}.#{base_domain}"] + @app.domains.reload.pluck(:fqdn)
+    @app.domains.reset
+    hostnames = @app.hostnames
+    return hostnames if Rails.env.production?
+
+    hostnames.map { |host| host.sub(/\.enkihost\.com\z/, '.localhost') }
   end
 
   def start_new_container(start: true)
@@ -325,7 +328,7 @@ class DockerService
     end
 
     # Ensure network exists - we use 'coolify' to match the existing proxy on this server
-    system("#{docker_bin} network create #{proxy_network}") rescue nil
+    system("#{docker_bin} network create #{proxy_network} >/dev/null 2>&1") rescue nil
 
     # Addon environment variables. A running addon's URL wins over a user-defined
     # variable (it is appended last, and docker keeps the last -e for a key), but an
