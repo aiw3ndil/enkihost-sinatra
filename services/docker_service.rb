@@ -3,8 +3,9 @@ require 'shellwords'
 require 'net/http'
 
 class DockerService
-  def initialize(deployment)
+  def initialize(deployment, log_to_deployment: true)
     @deployment = deployment
+    @log_to_deployment = log_to_deployment
     @app = deployment.app
     @build_path = self.class.repo_cache_path(@app.id)
   end
@@ -34,6 +35,47 @@ class DockerService
     stop_old_container
   ensure
     # cleanup_build_directory
+  end
+
+  # Traefik reads routing rules from container labels, which are fixed when the container
+  # is created. After the app's domains change, the container of the latest successful
+  # deployment is recreated from the same image with up-to-date labels. The new container
+  # is started (and must boot) before the old one is removed, and the old one is kept if
+  # the new one fails.
+  def self.refresh_routing(app)
+    deployment = app.deployments.success.order(id: :desc).first
+    return unless deployment
+
+    new(deployment, log_to_deployment: false).refresh_routing
+  end
+
+  def refresh_routing
+    container_name = "enkihost-app-#{@app.id}-#{@deployment.id}"
+
+    # Serializes refreshes of the same app (e.g. several domains removed in a row)
+    with_build_lock do
+      state = `#{docker_bin} inspect -f '{{.State.Status}}' #{container_name} 2>/dev/null`.strip
+      if state.blank?
+        log("No container #{container_name} found; routing will be applied on the next deployment.")
+        return
+      end
+
+      previous_name = "#{container_name}-previous"
+      system("#{docker_bin} rm -f #{previous_name} >/dev/null 2>&1")
+      system_cmd_array([docker_bin, "rename", container_name, previous_name])
+
+      begin
+        # A stopped app stays stopped: create the container without starting it
+        start_new_container(start: state == 'running')
+      rescue StandardError
+        system("#{docker_bin} rm -f #{container_name} >/dev/null 2>&1")
+        system("#{docker_bin} rename #{previous_name} #{container_name} >/dev/null 2>&1")
+        raise
+      end
+
+      system_cmd_array([docker_bin, "rm", "-f", previous_name])
+      log("Routing for app #{@app.id} updated: #{routed_domains.join(', ')}")
+    end
   end
 
   def self.get_container_stats(container_name)
@@ -217,7 +259,12 @@ class DockerService
     log("Assigned new port to app: #{@app.port}")
   end
 
-  def start_new_container
+  def routed_domains
+    base_domain = !Rails.env.production? ? "localhost" : "enkihost.com"
+    ["#{@app.subdomain}.#{base_domain}"] + @app.domains.reload.pluck(:fqdn)
+  end
+
+  def start_new_container(start: true)
     image_tag = "enkihost-#{@app.id}-#{@deployment.id}"
     container_name = "enkihost-app-#{@app.id}-#{@deployment.id}"
     
@@ -233,16 +280,17 @@ class DockerService
     proxy_network = 'coolify'
 
     # Traefik labels + App ID label for identification
-    base_domain = !Rails.env.production? ? "localhost" : "enkihost.com"
-    domain = "#{@app.subdomain}.#{base_domain}"
-    custom_domains = @app.domains.pluck(:fqdn)
-    
+    domains = routed_domains
+    domain = domains.first
+
     # Use array of domains with || for Traefik v3 compatibility
     # v3 expects Host() to have exactly one parameter
-    all_domains = ([domain] + custom_domains).map { |d| "Host(\"#{d}\")" }.join(" || ")
+    all_domains = domains.map { |d| "Host(\"#{d}\")" }.join(" || ")
 
-    router_name = "enkihost-app-#{@app.id}-#{@deployment.id}"
-    service_name = "enkihost-app-#{@app.id}-#{@deployment.id}"
+    # Unique per container: while a replacement boots next to the old container, two
+    # containers defining the same router with different rules would make Traefik drop it
+    router_name = "enkihost-app-#{@app.id}-#{@deployment.id}-#{SecureRandom.hex(3)}"
+    service_name = router_name
 
     # Labels as an array of strings
     labels = [
@@ -303,7 +351,7 @@ class DockerService
 
     # Build full docker run command as array
     cmd_args = [
-      docker_bin, "run", "-d", 
+      docker_bin, *(start ? ["run", "-d"] : ["create"]),
       "--name", container_name,
       "--network", proxy_network,
       "--cpus", @app.cpu_limit.to_s,
@@ -336,7 +384,8 @@ class DockerService
     
     # Log command without tokens (env vars already sanitized in system_cmd logs)
     system_cmd_array(cmd_args)
-    
+    return log("Container #{container_name} created (not started).") unless start
+
     wait_for_readiness(container_name, proxy_network, internal_port)
 
     log("Container #{container_name} started and healthy! Access it at http://#{domain}")
@@ -522,7 +571,8 @@ class DockerService
     display_command = sanitize_message(display_command)
     
     # Use popen2e with array to bypass shell
-    Open3.popen2e(env, *command_args, chdir: @build_path) do |_stdin, stdout_and_stderr, wait_thr|
+    chdir = Dir.exist?(@build_path) ? @build_path : Dir.pwd
+    Open3.popen2e(env, *command_args, chdir: chdir.to_s) do |_stdin, stdout_and_stderr, wait_thr|
       buffer = ""
       last_flush = Time.current
 
@@ -562,6 +612,11 @@ class DockerService
   end
 
   def log(message)
+    unless @log_to_deployment
+      Rails.logger.info "[DockerService] #{message.to_s.strip}"
+      return
+    end
+
     timestamped_message = "\n[#{Time.current}] #{message}"
     # Use update_all with SQL concatenation to avoid loading the whole log into memory.
     Deployment.where(id: @deployment.id).update_all(
