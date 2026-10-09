@@ -147,6 +147,9 @@ class AppsController < ApplicationController
       end
 
       if updated
+        # Renaming moves the default subdomain; the proxy has to route the new host
+        SyncAppSettingsJob.perform_later(@app.id) if @app.saved_change_to_subdomain? && @app.local?
+
         if @app.coolify_uuid.present? && defined?(CoolifyService)
           begin
             CoolifyService.new.sync_settings(@app)

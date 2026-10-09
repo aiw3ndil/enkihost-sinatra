@@ -47,11 +47,13 @@ class App < ApplicationRecord
   before_validation :set_default_branch
   before_validation :normalize_repository_url
   before_validation :generate_subdomain, on: :create
+  before_validation :regenerate_subdomain, on: :update, if: :will_save_change_to_name?
   before_validation :generate_webhook_secret
   before_validation :set_default_limits
   before_validation :set_default_runtime_status, on: :create
   before_validation :set_default_deployment_type, on: :create
   after_create :create_default_domain
+  after_update :rename_default_domain, if: :saved_change_to_subdomain?
 
   def current_container_name
     # In a real system, we'd query the Docker API. 
@@ -267,11 +269,39 @@ class App < ApplicationRecord
   def generate_subdomain
     return if subdomain.present?
 
-    self.subdomain = name.to_s.parameterize
-    # Ensure it's unique if multiple users use same name
-    if App.exists?(subdomain: subdomain)
-      self.subdomain = "#{subdomain}-#{SecureRandom.hex(3)}"
-    end
+    self.subdomain = available_subdomain
+  end
+
+  # The default subdomain follows the app name, so renaming an app moves it to
+  # <new-name>.enkihost.com.
+  def regenerate_subdomain
+    candidate = available_subdomain
+    self.subdomain = candidate unless candidate == subdomain
+  end
+
+  # Subdomain derived from the name, with a random suffix when another app or a domain
+  # record already uses it (e.g. two users with apps of the same name).
+  def available_subdomain
+    # DNS labels allow letters, digits and hyphens, up to 63 chars (room left for the suffix)
+    base = name.to_s.parameterize.tr('_', '-').squeeze('-')[0, 56].to_s.delete_prefix('-').delete_suffix('-')
+    base = "app-#{SecureRandom.hex(3)}" if base.blank?
+    return subdomain if subdomain.present? && subdomain.sub(/-\h{6}\z/, '') == base && !subdomain_taken?(subdomain)
+    return base unless subdomain_taken?(base)
+
+    "#{base}-#{SecureRandom.hex(3)}"
+  end
+
+  def subdomain_taken?(candidate)
+    App.where(subdomain: candidate).where.not(id: id).exists? ||
+      Domain.where(fqdn: "#{candidate}.enkihost.com").where.not(app_id: id).exists?
+  end
+
+  # Moves the default domain record along with the subdomain. Apps whose default domain
+  # was deleted keep only their custom domains.
+  def rename_default_domain
+    old_subdomain, new_subdomain = saved_change_to_subdomain
+    default_domain = domains.find_by(fqdn: "#{old_subdomain}.enkihost.com")
+    default_domain&.update!(fqdn: "#{new_subdomain}.enkihost.com")
   end
 
   def generate_webhook_secret
