@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_10_08_130000) do
+ActiveRecord::Schema[7.1].define(version: 2026_10_09_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -47,6 +47,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_08_130000) do
     t.index ["coolify_uuid"], name: "index_apps_on_coolify_uuid"
     t.index ["subdomain"], name: "index_apps_on_subdomain"
     t.index ["user_id"], name: "index_apps_on_user_id"
+    t.index "user_id, lower((name)::text)", name: "index_apps_on_user_id_and_lower_name", unique: true
   end
 
   create_table "backup_configurations", force: :cascade do |t|

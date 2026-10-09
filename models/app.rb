@@ -30,7 +30,8 @@ class App < ApplicationRecord
     local: 'local'
   }
 
-  validates :name, presence: true, uniqueness: { scope: :user_id }
+  validates :name, presence: true, length: { maximum: 100 },
+                   uniqueness: { scope: :user_id, case_sensitive: false, message: 'is already used by another of your applications' }
   validates :kind, presence: true, inclusion: { in: kinds.keys }
   validates :build_pack, presence: true, inclusion: { in: build_packs.keys }
   validates :deployment_type, presence: true, inclusion: { in: deployment_types.keys }
@@ -42,6 +43,7 @@ class App < ApplicationRecord
   validates :port, numericality: { only_integer: true, allow_nil: true }
   validate :validate_app_limit, on: :create
 
+  before_validation :normalize_name
   before_validation :set_default_branch
   before_validation :normalize_repository_url
   before_validation :generate_subdomain, on: :create
@@ -216,6 +218,10 @@ class App < ApplicationRecord
       Rails.logger.error "Error generating docker_compose_with_labels for app #{id}: #{e.message}"
       docker_compose_raw
     end
+  end
+
+  def normalize_name
+    self.name = name.to_s.strip.squeeze(' ').presence if name_changed? || new_record?
   end
 
   def set_default_branch

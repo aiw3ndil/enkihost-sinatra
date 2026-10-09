@@ -138,7 +138,15 @@ class AppsController < ApplicationController
 
     def update
       set_app
-      if @app.update(app_params)
+      updated = begin
+        @app.update(app_params)
+      rescue ActiveRecord::RecordNotUnique
+        # Lost a race against a concurrent rename; the DB index caught the duplicate
+        @app.errors.add(:name, 'is already used by another of your applications')
+        false
+      end
+
+      if updated
         if @app.coolify_uuid.present? && defined?(CoolifyService)
           begin
             CoolifyService.new.sync_settings(@app)
