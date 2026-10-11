@@ -65,11 +65,7 @@ module Api
           token_param = params[:personal_access_token] || params[:token] ||
                         json_params['personal_access_token'] || json_params['token']
           redirect_uri_param = params[:redirect_uri] || json_params['redirect_uri']
-          redirect_uri = if redirect_uri_param.present? && redirect_uri_param != 'undefined'
-                           redirect_uri_param
-                         else
-                           GitlabService.redirect_uri
-                         end
+          redirect_uri = GitlabService.redirect_uri(redirect_uri_param == 'undefined' ? nil : redirect_uri_param)
 
           # If Personal Access Token provided, connect immediately
           return connect_with_token(user, token_param) if token_param.present?
@@ -153,7 +149,8 @@ module Api
 
           if is_callback && request.request_method == 'GET'
             frontend_url = ENV['FRONTEND_URL'] || 'https://enkihost.com'
-            redirect "#{frontend_url}/dashboard/apps/new?step=2&gitlab=connected&token=#{new_token}&auth_token=#{new_token}"
+            # The frontend callback page stores the session token and returns to the new app wizard.
+            redirect "#{frontend_url}/callback/gitlab?token=#{new_token}"
           else
             connected_response(user, new_token)
           end
