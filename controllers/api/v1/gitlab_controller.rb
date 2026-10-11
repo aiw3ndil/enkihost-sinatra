@@ -64,8 +64,7 @@ module Api
           code = params[:code] || json_params['code']
           token_param = params[:personal_access_token] || params[:token] ||
                         json_params['personal_access_token'] || json_params['token']
-          redirect_uri_param = params[:redirect_uri] || json_params['redirect_uri']
-          redirect_uri = GitlabService.redirect_uri(redirect_uri_param == 'undefined' ? nil : redirect_uri_param)
+          redirect_uri = GitlabService.redirect_uri
 
           # If Personal Access Token provided, connect immediately
           return connect_with_token(user, token_param) if token_param.present?

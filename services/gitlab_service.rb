@@ -10,10 +10,10 @@ class GitlabService
     Gitlab.client(endpoint: "#{BASE_URL}/api/v4", private_token: token, httparty: { timeout: 10 })
   end
 
-  # GITLAB_REDIRECT_URI, when set, must be registered in the GitLab OAuth application and takes
-  # precedence over the redirect URI the client asks for.
-  def self.redirect_uri(requested = nil)
-    ENV['GITLAB_REDIRECT_URI'].presence || requested.presence || 'https://api.enkihost.com/api/v1/gitlab/callback'
+  # Must be registered in the GitLab OAuth application. The API callback always receives the
+  # code, so the redirect URI a client asks for is ignored.
+  def self.redirect_uri
+    ENV['GITLAB_REDIRECT_URI'].presence || 'https://api.enkihost.com/api/v1/gitlab/callback'
   end
 
   def self.authorize_url(state, redirect_uri)
