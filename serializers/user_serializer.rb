@@ -22,6 +22,10 @@ class UserSerializer
     user.github_connected
   end
 
+  attribute :gitlab_connected do |user|
+    user.gitlab_connected
+  end
+
   attribute :google_connected do |user|
     user.google_token.present?
   end

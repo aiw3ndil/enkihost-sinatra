@@ -80,6 +80,7 @@ class User < ApplicationRecord
   # Encryption setup (ActiveRecord::Encryption)
   encrypts :github_token rescue nil
   encrypts :gitlab_token rescue nil
+  encrypts :gitlab_refresh_token rescue nil
   encrypts :google_token rescue nil
 
   def github_token
@@ -93,6 +94,13 @@ class User < ApplicationRecord
     super
   rescue ActiveRecord::Encryption::Errors::Decryption, StandardError => e
     warn "ActiveRecord::Encryption error reading gitlab_token for user #{id}: #{e.message}"
+    nil
+  end
+
+  def gitlab_refresh_token
+    super
+  rescue ActiveRecord::Encryption::Errors::Decryption, StandardError => e
+    warn "ActiveRecord::Encryption error reading gitlab_refresh_token for user #{id}: #{e.message}"
     nil
   end
 
@@ -169,6 +177,42 @@ class User < ApplicationRecord
 
   def github_connected
     github_token.present?
+  end
+
+  def gitlab_connected
+    gitlab_token.present?
+  end
+
+  # Stores the token response of GitLab's OAuth token endpoint.
+  def store_gitlab_oauth!(data, username: gitlab_username)
+    update!(
+      gitlab_token: data['access_token'],
+      gitlab_refresh_token: data['refresh_token'],
+      gitlab_token_expires_at: data['expires_in'] ? Time.now + data['expires_in'].to_i : nil,
+      gitlab_username: username
+    )
+  end
+
+  def disconnect_gitlab!
+    update_columns(gitlab_token: nil, gitlab_refresh_token: nil, gitlab_token_expires_at: nil, gitlab_username: nil)
+  end
+
+  # Returns a usable GitLab token, refreshing the OAuth token when it is about to expire.
+  # Personal access tokens have no expiry stored and are returned as they are.
+  def fresh_gitlab_token!
+    return gitlab_token unless gitlab_token_expires_at && gitlab_token_expires_at < Time.now + 300
+
+    # The refresh token rotates on every use, so concurrent deploys must not refresh twice.
+    with_lock do
+      if gitlab_token_expires_at < Time.now + 300 && gitlab_refresh_token.present?
+        store_gitlab_oauth!(GitlabService.refresh_token(gitlab_refresh_token))
+      end
+    end
+    gitlab_token
+  rescue GitlabService::OAuthError => e
+    warn "GitLab token refresh failed for user #{id}: #{e.message}"
+    disconnect_gitlab!
+    nil
   end
 
   private

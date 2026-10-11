@@ -106,6 +106,8 @@ class AppsController < ApplicationController
             rescue StandardError => e
               warn "Soft error in setup_github_webhook: #{e.message}"
             end
+          elsif @app.gitlab_project_path && current_user.gitlab_connected
+            setup_gitlab_webhook(@app)
           end
 
           status 201
@@ -240,6 +242,15 @@ class AppsController < ApplicationController
       end
     rescue StandardError => e
       warn "Failed to create GitHub Webhook for app #{app.id}: #{e.message}"
+    end
+
+    def setup_gitlab_webhook(app)
+      callback_url = "https://api.enkihost.com/webhooks/gitlab/#{app.id}"
+      app.update!(webhook_secret: SecureRandom.hex(20))
+
+      GitlabService.new(current_user).create_webhook(app.gitlab_project_path, callback_url, app.webhook_secret)
+    rescue StandardError => e
+      warn "Failed to create GitLab Webhook for app #{app.id}: #{e.message}"
     end
 
     def app_params

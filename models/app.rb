@@ -91,6 +91,11 @@ class App < ApplicationRecord
     latest_deployment&.status || 'never_deployed'
   end
 
+  # Full project path (group/subgroup/repo) when the repository is hosted on gitlab.com.
+  def gitlab_project_path
+    repository_url.to_s[%r{\Ahttps://gitlab\.com/(.+/.+)\z}, 1]
+  end
+
   private
 
   def create_default_domain
@@ -313,8 +318,16 @@ class App < ApplicationRecord
     
     url = repository_url.to_s.strip
 
+    # 0. GitLab, SSH or HTTP(S). Projects can live in nested groups (group/subgroup/repo) and
+    # deep links put the page after a /-/ separator (group/repo/-/tree/main).
+    if url =~ %r{\A(?:git@gitlab\.com:|(?:https?://)?(?:www\.)?gitlab\.com/)([^\s#?]+)}
+      path = Regexp.last_match(1).split('/-/').first.sub(%r{/+\z}, '').sub(/\.git\z/, '')
+      self.repository_url = "https://gitlab.com/#{path}"
+      return
+    end
+
     # 1. SSH format: git@github.com:owner/repo(.git)
-    if url =~ %r{\Agit@(github|gitlab)\.com:([^/]+)/([^/\s]+?)(?:\.git)?\z}
+    if url =~ %r{\Agit@(github)\.com:([^/]+)/([^/\s]+?)(?:\.git)?\z}
       host = Regexp.last_match(1)
       owner = Regexp.last_match(2)
       repo = Regexp.last_match(3)
@@ -323,7 +336,7 @@ class App < ApplicationRecord
     end
 
     # 2. Standard HTTP/HTTPS or deep tree URL: (https://)(www.)github.com/owner/repo(...)
-    if url =~ %r{(?:https?://)?(?:www\.)?(github|gitlab)\.com/([^/\s]+)/([^/\s#?]+)}
+    if url =~ %r{(?:https?://)?(?:www\.)?(github)\.com/([^/\s]+)/([^/\s#?]+)}
       host = Regexp.last_match(1)
       owner = Regexp.last_match(2)
       repo = Regexp.last_match(3).sub(/\.git\z/, '')

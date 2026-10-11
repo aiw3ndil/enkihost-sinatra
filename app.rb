@@ -115,6 +115,7 @@ class EnkihostApp < Sinatra::Base
   # Mount API v1 Specialized Controllers
   use Api::V1::DatabasesController
   use Api::V1::GithubController
+  use Api::V1::GitlabController
   use Api::V1::GoogleController
   use Api::V1::PaymentsController
   use Api::V1::BackupConfigurationsController

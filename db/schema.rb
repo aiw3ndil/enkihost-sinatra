@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_10_09_100000) do
+ActiveRecord::Schema[7.1].define(version: 2026_10_11_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -129,6 +129,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_09_100000) do
     t.string "github_username"
     t.string "gitlab_token"
     t.string "gitlab_username"
+    t.string "gitlab_refresh_token"
+    t.datetime "gitlab_token_expires_at"
     t.string "plan", default: "spark"
     t.string "stripe_customer_id"
     t.string "stripe_subscription_id"

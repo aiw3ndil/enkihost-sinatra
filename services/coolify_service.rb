@@ -227,13 +227,11 @@ class CoolifyService
     return url if path.blank?
 
     if url.include?('gitlab.com')
-      token = app.user.gitlab_token.to_s.gsub(%r{https?://}, '').split('@').last || ""
-      # Ensure token doesn't contain Gitlab domain
-      token = token.split('/').first if token.include?('gitlab.com')
-      
-      if app.user.gitlab_token.present?
+      token = app.user.fresh_gitlab_token!.to_s.strip
+
+      if token.present?
         log(deployment, "ℹ️ Injecting GitLab token for private repository.")
-        "https://oauth2:#{app.user.gitlab_token.to_s.split('@').last.split('/').last}@gitlab.com/#{path}"
+        "https://oauth2:#{token}@gitlab.com/#{path}"
       else
         "https://gitlab.com/#{path}"
       end
@@ -267,6 +265,10 @@ class CoolifyService
     # Strip everything and keep only owner/repo
     parts = url.to_s.gsub(/\.git$/, '').split('/').reject(&:blank?)
     return "" if parts.size < 2
+    # GitLab projects can be nested in subgroups, so keep the whole path after the host
+    host_index = parts.index { |part| part.end_with?('gitlab.com') }
+    return parts.drop(host_index + 1).join('/') if host_index
+
     parts.last(2).join('/')
   end
 
