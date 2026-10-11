@@ -301,15 +301,24 @@ class DockerService
       "traefik.http.routers.#{router_name}.rule=#{all_domains}",
       "traefik.http.routers.#{router_name}.priority=1000",
       "traefik.http.routers.#{router_name}.service=#{service_name}",
-      "traefik.http.routers.#{router_name}.entrypoints=http",
       "traefik.http.services.#{service_name}.loadbalancer.server.port=#{internal_port}",
       "enkihost.app_id=#{@app.id}"
     ]
 
     if Rails.env.production?
-      labels << "traefik.http.routers.#{router_name}.entrypoints=http,https"
+      # Serve over HTTPS only; plain HTTP requests get redirected to HTTPS
+      labels << "traefik.http.routers.#{router_name}.entrypoints=https"
       labels << "traefik.http.routers.#{router_name}.tls=true"
       labels << "traefik.http.routers.#{router_name}.tls.certresolver=letsencrypt"
+      labels << "traefik.http.routers.#{router_name}-http.rule=#{all_domains}"
+      labels << "traefik.http.routers.#{router_name}-http.priority=1000"
+      labels << "traefik.http.routers.#{router_name}-http.entrypoints=http"
+      labels << "traefik.http.routers.#{router_name}-http.service=#{service_name}"
+      labels << "traefik.http.routers.#{router_name}-http.middlewares=enkihost-redirect-to-https"
+      labels << "traefik.http.middlewares.enkihost-redirect-to-https.redirectscheme.scheme=https"
+      labels << "traefik.http.middlewares.enkihost-redirect-to-https.redirectscheme.permanent=true"
+    else
+      labels << "traefik.http.routers.#{router_name}.entrypoints=http"
     end
 
     # Environment variables

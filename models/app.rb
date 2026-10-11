@@ -157,7 +157,13 @@ class App < ApplicationRecord
         "traefik.http.routers.#{router_name}.rule=#{host_rule}",
         "traefik.http.routers.#{router_name}.entrypoints=https",
         "traefik.http.routers.#{router_name}.tls=true",
-        "traefik.http.routers.#{router_name}.tls.certresolver=letsencrypt"
+        "traefik.http.routers.#{router_name}.tls.certresolver=letsencrypt",
+        # Plain HTTP requests get redirected to HTTPS
+        "traefik.http.routers.#{router_name}-http.rule=#{host_rule}",
+        "traefik.http.routers.#{router_name}-http.entrypoints=http",
+        "traefik.http.routers.#{router_name}-http.middlewares=enkihost-redirect-to-https",
+        "traefik.http.middlewares.enkihost-redirect-to-https.redirectscheme.scheme=https",
+        "traefik.http.middlewares.enkihost-redirect-to-https.redirectscheme.permanent=true"
       ]
 
       if labels.is_a?(Array)

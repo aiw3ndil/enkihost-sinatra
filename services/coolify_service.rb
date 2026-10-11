@@ -79,6 +79,7 @@ class CoolifyService
       instant_deploy: instant_deploy,
       ports_exposes: app.port.to_s.presence || "3000",
       force_domain_override: true,
+      is_force_https_enabled: true,
       git_repository: clean_repo_url(app, deployment),
       git_branch: app.branch || 'main'
     }
@@ -285,6 +286,7 @@ class CoolifyService
       name: "enkihost-app-#{app.id}",
       build_pack: app.build_pack == 'docker_compose' ? 'dockercompose' : app.build_pack,
       instant_deploy: false,
+      is_force_https_enabled: true,
       connect_to_docker_network: true
     }
   end
