@@ -99,9 +99,8 @@ module Api
           state = params[:state] || json_params['state']
 
           if code.blank?
-            status 422
             error_reason = params[:error_description] || params[:error] || 'Missing authorization code'
-            return { error: "GitLab authorization failed: #{error_reason}" }.to_json
+            return connect_failed(422, "GitLab authorization failed: #{error_reason}", is_callback: true)
           end
 
           user = current_user
@@ -119,8 +118,7 @@ module Api
           end
 
           unless user
-            status 401
-            return { error: 'User could not be authenticated from session or state' }.to_json
+            return connect_failed(401, 'User could not be authenticated from session or state', is_callback: true)
           end
 
           exchange_and_connect(user, code, redirect_uri, is_callback: true)
@@ -130,29 +128,40 @@ module Api
           begin
             data = GitlabService.exchange_code(code, redirect_uri)
             gitlab_user = GitlabService.client_for_token(data['access_token']).user
+            user.jti = User.generate_jti
+            user.store_gitlab_oauth!(data, username: gitlab_user.username)
           rescue GitlabService::OAuthError => e
             warn "[GitlabController#exchange_and_connect] GitLab OAuth exchange failed: #{e.message}"
-            status 422
-            return {
-              error: "Failed to obtain access token from GitLab: #{e.message}",
-              message: "Failed to obtain access token from GitLab: #{e.message}"
-            }.to_json
+            return connect_failed(422, "Failed to obtain access token from GitLab: #{e.message}", is_callback: is_callback)
           rescue StandardError => e
-            status 500
-            return { error: "Failed to connect GitLab: #{e.message}" }.to_json
+            warn "[GitlabController#exchange_and_connect] Error: #{e.class}: #{e.message}"
+            return connect_failed(500, "Failed to connect GitLab: #{e.message}", is_callback: is_callback)
           end
 
-          user.jti = User.generate_jti
-          user.store_gitlab_oauth!(data, username: gitlab_user.username)
           new_token = generate_jwt_for(user)
 
           if is_callback && request.request_method == 'GET'
             frontend_url = ENV['FRONTEND_URL'] || 'https://enkihost.com'
             # The frontend callback page stores the session token and returns to the new app wizard.
+            content_type 'text/html'
             redirect "#{frontend_url}/callback/gitlab?token=#{new_token}"
           else
             connected_response(user, new_token)
           end
+        end
+
+        # Browsers reach the callback by a GET redirect from gitlab.com, where Rack::Protection's
+        # JsonCsrf replaces JSON responses, redirects included, with a bare "Forbidden". Errors are
+        # sent back to the frontend, and redirects are not labelled as JSON.
+        def connect_failed(code, message, is_callback: false)
+          if is_callback && request.request_method == 'GET'
+            frontend_url = ENV['FRONTEND_URL'] || 'https://enkihost.com'
+            content_type 'text/html'
+            redirect "#{frontend_url}/callback/gitlab?#{URI.encode_www_form(error: 'connection_failed', error_description: message)}"
+          end
+
+          status code
+          { error: message, message: message }.to_json
         end
 
         def connect_with_token(user, pat_token)
