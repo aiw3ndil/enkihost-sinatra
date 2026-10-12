@@ -36,7 +36,9 @@ class MeController < ApplicationController
 
   helpers do
     def show
-      UserSerializer.new(current_user).serializable_hash.dig(:data, :attributes).to_json
+      data = UserSerializer.new(current_user).serializable_hash.dig(:data, :attributes)
+      data[:impersonated_by] = { id: impersonator.id, email: impersonator.email } if impersonating?
+      data.to_json
     end
 
     def update

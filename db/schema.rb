@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_10_11_120000) do
+ActiveRecord::Schema[7.1].define(version: 2026_10_12_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -44,10 +44,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_11_120000) do
     t.string "docker_compose_location"
     t.text "docker_compose_raw"
     t.string "deployment_type"
+    t.index "user_id, lower((name)::text)", name: "index_apps_on_user_id_and_lower_name", unique: true
     t.index ["coolify_uuid"], name: "index_apps_on_coolify_uuid"
     t.index ["subdomain"], name: "index_apps_on_subdomain"
     t.index ["user_id"], name: "index_apps_on_user_id"
-    t.index "user_id, lower((name)::text)", name: "index_apps_on_user_id_and_lower_name", unique: true
   end
 
   create_table "backup_configurations", force: :cascade do |t|
@@ -105,6 +105,16 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_11_120000) do
     t.index ["app_id"], name: "index_environment_variables_on_app_id"
   end
 
+  create_table "impersonations", force: :cascade do |t|
+    t.bigint "impersonator_id", null: false
+    t.bigint "user_id", null: false
+    t.string "ip_address"
+    t.string "user_agent"
+    t.datetime "created_at", null: false
+    t.index ["impersonator_id"], name: "index_impersonations_on_impersonator_id"
+    t.index ["user_id"], name: "index_impersonations_on_user_id"
+  end
+
   create_table "storages", force: :cascade do |t|
     t.bigint "app_id", null: false
     t.string "name"
@@ -129,8 +139,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_11_120000) do
     t.string "github_username"
     t.string "gitlab_token"
     t.string "gitlab_username"
-    t.string "gitlab_refresh_token"
-    t.datetime "gitlab_token_expires_at"
     t.string "plan", default: "spark"
     t.string "stripe_customer_id"
     t.string "stripe_subscription_id"
@@ -139,6 +147,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_11_120000) do
     t.string "google_username"
     t.boolean "god_mode", default: false
     t.string "name"
+    t.string "gitlab_refresh_token"
+    t.datetime "gitlab_token_expires_at"
     t.index ["email"], name: "index_users_on_email", unique: true
     t.index ["google_uid"], name: "index_users_on_google_uid"
     t.index ["jti"], name: "index_users_on_jti"
@@ -155,5 +165,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_11_120000) do
   add_foreign_key "deployments", "apps"
   add_foreign_key "domains", "apps"
   add_foreign_key "environment_variables", "apps"
+  add_foreign_key "impersonations", "users"
+  add_foreign_key "impersonations", "users", column: "impersonator_id"
   add_foreign_key "storages", "apps"
 end

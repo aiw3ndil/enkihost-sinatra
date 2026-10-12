@@ -1,6 +1,6 @@
 class UserSerializer
   include JSONAPI::Serializer
-  attributes :id, :name, :email, :plan, :limits, :god_mode, :created_at, :github_token, :github_username, :gitlab_token, :gitlab_username, :google_token, :google_username, :stripe_customer_id, :stripe_subscription_id
+  attributes :id, :name, :email, :plan, :limits, :god_mode, :created_at, :github_username, :gitlab_username, :google_username, :stripe_customer_id, :stripe_subscription_id
 
   attribute :apps_count do |user|
     user.apps.count

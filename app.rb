@@ -120,6 +120,7 @@ class EnkihostApp < Sinatra::Base
   use Api::V1::PaymentsController
   use Api::V1::BackupConfigurationsController
   use Api::V1::BackupsController
+  use Api::V1::AdminController
 
   # Mount Webhooks Controllers
   use Webhooks::GithubController

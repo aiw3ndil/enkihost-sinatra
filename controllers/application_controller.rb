@@ -69,6 +69,17 @@ class ApplicationController < Sinatra::Base
     ''
   end
 
+  # Account-level actions a god mode user cannot take while impersonating someone:
+  # they would change the user's identity, billing or linked accounts, or end their session.
+  IMPERSONATION_FORBIDDEN = [
+    [%w[DELETE], %r{\A/api/v1/logout\z}],
+    [%w[PUT PATCH], %r{\A(/api/v1)?/me(/password)?\z}],
+    [:any, %r{\A/api/v1/(github|gitlab|google)/(connect|callback)\z}],
+    [:any, %r{\A/api/v1/payments/}],
+    [%w[PUT PATCH], %r{\A/api/v1/backup_configuration\z}],
+    [:any, %r{\A/api/v1/admin/}]
+  ].freeze
+
   helpers do
     def current_user
       @current_user ||= authenticate_user
@@ -91,6 +102,11 @@ class ApplicationController < Sinatra::Base
       if token.count('.') == 2
         secret = ENV['JWT_SECRET_KEY'] || Rails.application.secret_key_base
         decoded, _ = JWT.decode(token, secret, true, { algorithm: 'HS256' })
+        if decoded && decoded['imp']
+          # Impersonation tokens only stay valid while the issuer still has god mode.
+          @impersonator = User.find_by(id: decoded['imp'], god_mode: true)
+          return @impersonator && User.find_by(id: decoded['sub'])
+        end
         if decoded && (decoded['sub'] || decoded['jti'])
           return User.find_by(id: decoded['sub']) || User.find_by(jti: decoded['jti']) if defined?(User)
         end
@@ -106,15 +122,32 @@ class ApplicationController < Sinatra::Base
       nil
     end
 
-    def generate_jwt_for(user)
+    def generate_jwt_for(user, impersonator: nil, expires_in: 86400 * 7)
       secret = ENV['JWT_SECRET_KEY'] || Rails.application.secret_key_base
       payload = {
         sub: user.id,
         jti: user.jti,
         scp: 'user',
-        exp: (Time.now + 86400 * 7).to_i
+        exp: (Time.now + expires_in).to_i
       }
+      payload[:imp] = impersonator.id if impersonator
       JWT.encode(payload, secret, 'HS256')
+    end
+
+    # The god mode user acting as current_user, if any.
+    def impersonator
+      current_user
+      @impersonator
+    end
+
+    def impersonating?
+      impersonator.present?
+    end
+
+    def impersonation_forbidden?
+      IMPERSONATION_FORBIDDEN.any? do |verbs, pattern|
+        (verbs == :any || verbs.include?(request.request_method)) && pattern.match?(request.path_info)
+      end
     end
 
     def user_not_authenticated
@@ -204,6 +237,13 @@ class ApplicationController < Sinatra::Base
       # Action skipped
     else
       authenticate_request!
+    end
+
+    if impersonating?
+      halt 403, { error: 'Not allowed while impersonating a user.' }.to_json if impersonation_forbidden?
+      unless request.get? || request.head?
+        warn "[impersonation] god=#{impersonator.id} as user=#{current_user.id}: #{request.request_method} #{request.path_info}"
+      end
     end
   end
 

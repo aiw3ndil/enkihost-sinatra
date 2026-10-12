@@ -11,6 +11,8 @@ class User < ApplicationRecord
   has_many :addons, through: :apps
   has_many :backups, dependent: :destroy
   has_one :backup_configuration, dependent: :destroy
+  has_many :impersonations, dependent: :delete_all
+  has_many :impersonations_performed, class_name: 'Impersonation', foreign_key: :impersonator_id, dependent: :delete_all
 
   PLAN_LIMITS = {
     'spark' => {
