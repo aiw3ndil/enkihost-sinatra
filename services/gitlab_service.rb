@@ -37,6 +37,23 @@ class GitlabService
     request_token(grant_type: 'refresh_token', refresh_token: refresh_token, redirect_uri: redirect_uri)
   end
 
+  # Revoking the OAuth token makes GitLab ask for authorization again on the next connect.
+  # Failures are only logged: the connection is removed locally either way.
+  def self.revoke_token(token)
+    return if token.blank?
+
+    Faraday.post("#{BASE_URL}/oauth/revoke", {
+      client_id: ENV['GITLAB_CLIENT_ID'],
+      client_secret: ENV['GITLAB_CLIENT_SECRET'],
+      token: token
+    }) do |req|
+      req.options.timeout = 10
+      req.options.open_timeout = 5
+    end
+  rescue StandardError => e
+    warn "[GitlabService] Token revocation failed: #{e.message}"
+  end
+
   def self.request_token(params)
     response = Faraday.post("#{BASE_URL}/oauth/token", params.merge(
       client_id: ENV['GITLAB_CLIENT_ID'],

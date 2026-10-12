@@ -15,6 +15,10 @@ module Api
         connect
       end
 
+      delete_action '/api/v1/gitlab/connect', :disconnect do
+        disconnect
+      end
+
       get_action '/api/v1/gitlab/callback', :callback do
         callback
       end
@@ -51,6 +55,14 @@ module Api
             status 500
             { error: "Failed to fetch repositories: #{e.message}", message: "Failed to fetch repositories: #{e.message}" }.to_json
           end
+        end
+
+        def disconnect
+          authenticate_request!
+          GitlabService.revoke_token(current_user.gitlab_token) if current_user.gitlab_token_expires_at
+          current_user.disconnect_gitlab!
+
+          { success: true, message: 'GitLab disconnected', gitlab_connected: false }.to_json
         end
 
         def connect
