@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_10_12_100000) do
+ActiveRecord::Schema[7.1].define(version: 2026_10_19_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -73,6 +73,20 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_12_100000) do
     t.bigint "addon_id"
     t.index ["addon_id"], name: "index_backups_on_addon_id"
     t.index ["user_id"], name: "index_backups_on_user_id"
+  end
+
+  create_table "database_imports", force: :cascade do |t|
+    t.bigint "addon_id", null: false
+    t.string "status", default: "pending", null: false
+    t.string "filename"
+    t.string "format"
+    t.bigint "size"
+    t.text "log"
+    t.datetime "started_at"
+    t.datetime "finished_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["addon_id"], name: "index_database_imports_on_addon_id"
   end
 
   create_table "deployments", force: :cascade do |t|
@@ -162,6 +176,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_12_100000) do
   add_foreign_key "backup_configurations", "users"
   add_foreign_key "backups", "addons"
   add_foreign_key "backups", "users"
+  add_foreign_key "database_imports", "addons"
   add_foreign_key "deployments", "apps"
   add_foreign_key "domains", "apps"
   add_foreign_key "environment_variables", "apps"

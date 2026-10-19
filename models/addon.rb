@@ -1,5 +1,6 @@
 class Addon < ApplicationRecord
   belongs_to :app
+  has_many :database_imports, dependent: :delete_all
 
   enum kind: {
     postgresql: 'postgresql',

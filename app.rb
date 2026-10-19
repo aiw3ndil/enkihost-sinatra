@@ -18,7 +18,7 @@ class EnkihostApp < Sinatra::Base
       resource '*',
                headers: :any,
                methods: %i[get post put patch delete options head],
-               expose: %w[Authorization],
+               expose: %w[Authorization Content-Disposition],
                credentials: true,
                max_age: 600
     end
