@@ -99,7 +99,21 @@ class TerminalWebsocketHandler
       ActiveRecord::Base.connection_handler.clear_active_connections! if defined?(ActiveRecord::Base)
     end
 
-    container_name = @app.current_container_name
+    # With an addon_id the terminal opens the addon's own client (psql, redis-cli)
+    # in its container, since app images rarely ship those tools.
+    addon = nil
+    if params['addon_id'].present?
+      addon = @app.addons.find_by(id: params['addon_id'])
+      ActiveRecord::Base.connection_handler.clear_active_connections!
+      unless addon&.console_command
+        ws.send({ identifier: identifier_str, type: 'reject_subscription' }.to_json)
+        ws.send({ identifier: identifier_str, message: { data: "\r\n\x1b[31mError: Add-on not found.\x1b[0m\r\n" } }.to_json)
+        ws.close
+        return
+      end
+    end
+
+    container_name = addon ? addon.container_name : @app.current_container_name
     unless container_name.present?
       ws.send({ identifier: identifier_str, message: { data: "\r\n\x1b[31mError: No successful deployment found for this app.\x1b[0m\r\n" } }.to_json)
       ws.close
@@ -116,15 +130,19 @@ class TerminalWebsocketHandler
       return
     end
 
-    # Detect shell
-    has_bash = system("#{docker_bin} exec #{container_name} which bash >/dev/null 2>&1")
-    shell = has_bash ? 'bash' : 'sh'
-    login_flag = (shell == 'bash' ? '--login' : '-l')
+    if addon
+      command = [docker_bin, 'exec', '-it', container_name, *addon.console_command]
+    else
+      # Detect shell
+      has_bash = system("#{docker_bin} exec #{container_name} which bash >/dev/null 2>&1")
+      shell = has_bash ? 'bash' : 'sh'
+      login_flag = (shell == 'bash' ? '--login' : '-l')
+      command = [docker_bin, 'exec', '-it', container_name, shell, login_flag]
+    end
 
     # Open PTY
     @master, slave = PTY.open
-    command = "#{docker_bin} exec -it #{container_name} #{shell} #{login_flag}"
-    @pid = spawn(command, in: slave, out: slave, err: slave, pgroup: true)
+    @pid = spawn(*command, in: slave, out: slave, err: slave, pgroup: true)
     slave.close
 
     # Acknowledge subscription

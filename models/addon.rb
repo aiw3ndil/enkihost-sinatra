@@ -60,14 +60,23 @@ class Addon < ApplicationRecord
   before_validation :set_default_status, on: :create
   before_destroy :cleanup_addon
 
+  def container_name
+    "enkihost-addon-#{id}"
+  end
+
+  # The interactive client for this addon, run inside its own container.
+  def console_command
+    if postgresql?
+      ['psql', '-U', config['user'].presence || 'postgres', '-d', config['database'].presence || config['user'].presence || 'postgres']
+    elsif redis?
+      ['redis-cli']
+    end
+  end
+
   private
 
   def ciphertext?(cfg)
     cfg.is_a?(Hash) && cfg.key?('p') && cfg.key?('h') && !cfg.key?('url')
-  end
-
-  def container_name
-    "enkihost-addon-#{id}"
   end
 
   # Reads the credentials the container was started with and re-saves the config
