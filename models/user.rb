@@ -32,8 +32,8 @@ class User < ApplicationRecord
     'ignite' => {
       max_apps: 2,
       allowed_kinds: ['rails', 'sinatra', 'jekyll'],
-      max_postgresql: 1,
-      max_redis: 1,
+      max_postgresql: 2,
+      max_redis: 2,
       cpu_limit: '1.0',
       memory_limit: '2g',
       postgresql_limit: '512m',
