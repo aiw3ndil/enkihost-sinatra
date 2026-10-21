@@ -159,6 +159,16 @@ class CoolifyService
     @conn.delete("applications/#{coolify_uuid}")
   end
 
+  def stop_application(coolify_uuid)
+    return false if coolify_uuid.blank?
+    @conn.get("applications/#{coolify_uuid}/stop").success?
+  end
+
+  def start_application(coolify_uuid)
+    return false if coolify_uuid.blank?
+    @conn.get("applications/#{coolify_uuid}/start").success?
+  end
+
   def add_storage(app, storage_record, deployment = nil)
     return false if app.coolify_uuid.blank?
 

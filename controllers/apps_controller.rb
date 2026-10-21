@@ -182,6 +182,7 @@ class AppsController < ApplicationController
 
     def start
       set_app
+      halt_if_suspended!
       if (container_name = @app.current_container_name)
         system("docker start #{container_name}")
         @app.update!(runtime_status: :running)
@@ -206,6 +207,7 @@ class AppsController < ApplicationController
 
     def restart
       set_app
+      halt_if_suspended!
       if (container_name = @app.current_container_name)
         system("docker restart #{container_name}")
         @app.update!(runtime_status: :running)
@@ -222,6 +224,13 @@ class AppsController < ApplicationController
     end
 
     private
+
+    def halt_if_suspended!
+      return unless @app.suspended?
+
+      halt 403, { 'Content-Type' => 'application/json' },
+           { error: "#{@app.name} is suspended because it does not fit the #{current_user.plan.capitalize} plan. Upgrade your plan to start it again." }.to_json
+    end
 
     def set_app
       @app = current_user.apps.includes(:latest_deployment, :user).find(params[:id])

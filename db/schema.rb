@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_10_19_100000) do
+ActiveRecord::Schema[7.1].define(version: 2026_10_21_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -22,6 +22,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_19_100000) do
     t.text "config"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "suspended_at"
     t.index ["app_id"], name: "index_addons_on_app_id"
   end
 
@@ -44,6 +45,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_19_100000) do
     t.string "docker_compose_location"
     t.text "docker_compose_raw"
     t.string "deployment_type"
+    t.datetime "suspended_at"
     t.index "user_id, lower((name)::text)", name: "index_apps_on_user_id_and_lower_name", unique: true
     t.index ["coolify_uuid"], name: "index_apps_on_coolify_uuid"
     t.index ["subdomain"], name: "index_apps_on_subdomain"

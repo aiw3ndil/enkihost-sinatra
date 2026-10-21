@@ -40,7 +40,8 @@ module Webhooks
         branch = payload.dig('ref')&.gsub('refs/heads/', '')
         commit_sha = payload.dig('after')
 
-        if branch == @app.branch
+        # Suspended apps (over the plan's limits) are not deployed until the user upgrades
+        if branch == @app.branch && !@app.suspended?
           deployment = @app.deployments.create!(
             status: :queued,
             commit_sha: commit_sha,

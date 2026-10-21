@@ -92,6 +92,11 @@ class App < ApplicationRecord
     latest_deployment&.status || 'never_deployed'
   end
 
+  # Stopped because it no longer fits the user's plan (see PlanEnforcementService)
+  def suspended?
+    suspended_at.present?
+  end
+
   # Full project path (group/subgroup/repo) when the repository is hosted on gitlab.com.
   def gitlab_project_path
     repository_url.to_s[%r{\Ahttps://gitlab\.com/(.+/.+)\z}, 1]

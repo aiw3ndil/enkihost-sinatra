@@ -7,6 +7,10 @@ module Api
         create_checkout_session
       end
 
+      post_action '/api/v1/payments/portal_session', :create_portal_session do
+        create_portal_session
+      end
+
       helpers do
         def create_checkout_session
           plan_name = params[:plan_id] || params[:plan_name]
@@ -42,6 +46,22 @@ module Api
             status 500
             { error: e.message }.to_json
           end
+        end
+
+        # Stripe's customer portal: cancel the subscription, change the card, see invoices
+        def create_portal_session
+          if current_user.stripe_customer_id.blank?
+            status 422
+            return { error: 'You do not have a subscription yet' }.to_json
+          end
+
+          frontend_url = ENV['FRONTEND_URL'] || 'https://enkihost.com'
+          session = StripeService.new.create_portal_session(current_user, "#{frontend_url}/dashboard/settings")
+          { url: session.url }.to_json
+        rescue StandardError => e
+          warn "Stripe Portal Session Error: #{e.message}"
+          status 500
+          { error: e.message }.to_json
         end
       end
     end

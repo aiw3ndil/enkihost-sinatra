@@ -114,6 +114,8 @@ class User < ApplicationRecord
   end
 
   before_validation :set_jti
+  # Downgrades suspend what no longer fits the plan; upgrades resume it
+  after_commit :enforce_plan_limits, on: :update, if: -> { saved_change_to_plan? || saved_change_to_god_mode? }
 
   def password
     @password
@@ -221,5 +223,9 @@ class User < ApplicationRecord
 
   def set_jti
     self.jti ||= self.class.generate_jti
+  end
+
+  def enforce_plan_limits
+    PlanEnforcementJob.perform_later(id)
   end
 end

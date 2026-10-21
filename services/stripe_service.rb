@@ -75,6 +75,13 @@ class StripeService
     Stripe::Checkout::Session.create(session_params)
   end
 
+  def create_portal_session(user, return_url)
+    Stripe::BillingPortal::Session.create({
+      customer: user.stripe_customer_id,
+      return_url: return_url
+    })
+  end
+
   def self.handle_webhook(payload, sig_header)
     endpoint_secret = ENV['STRIPE_WEBHOOK_SECRET']
     event = nil

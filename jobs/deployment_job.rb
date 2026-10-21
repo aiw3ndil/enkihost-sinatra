@@ -5,6 +5,14 @@ class DeploymentJob < ApplicationJob
     deployment = Deployment.find_by(id: deployment_id)&.reload
     return unless deployment&.queued?
 
+    # The app may have been suspended (plan downgrade) after the deployment was queued
+    if deployment.app.suspended?
+      deployment.update!(status: :failed, finished_at: Time.current,
+                         log: "#{deployment.log}Deployment cancelled: the app is suspended because it does not fit the #{deployment.app.user.plan.capitalize} plan.\n")
+      broadcast_status(deployment)
+      return
+    end
+
     deployment.update!(status: :building, started_at: Time.current, finished_at: nil, log: "Starting REAL deployment for #{deployment.app.name}...\n")
     broadcast_status(deployment)
     log_update(deployment, "Status updated to building. Checking for COOLIFY_TOKEN...")

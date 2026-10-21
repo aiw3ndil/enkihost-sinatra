@@ -14,6 +14,15 @@ class UserSerializer
     user.redis_count
   end
 
+  # Apps and databases stopped because they do not fit the current plan
+  attribute :suspended_apps_count do |user|
+    user.apps.where.not(suspended_at: nil).count
+  end
+
+  attribute :suspended_addons_count do |user|
+    user.addons.where.not(suspended_at: nil).count
+  end
+
   attribute :total_deployments_count do |user|
     user.deployments.count
   end

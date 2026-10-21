@@ -80,6 +80,10 @@ class AddonsController < ApplicationController
 
     def create
       set_app
+      if @app.suspended?
+        halt 403, { 'Content-Type' => 'application/json' },
+             { error: "#{@app.name} is suspended. Upgrade your plan to add databases to it." }.to_json
+      end
       Addon.transaction do
         current_user.lock!
         @addon = @app.addons.build(addon_params)
@@ -109,6 +113,7 @@ class AddonsController < ApplicationController
     def start
       set_app
       @addon = @app.addons.find(params[:id])
+      halt_if_suspended!
       AddonService.new(@addon).start if defined?(AddonService)
       @addon.update!(status: :running)
       AddonSerializer.new(@addon).serializable_hash.dig(:data, :attributes).to_json
@@ -129,6 +134,7 @@ class AddonsController < ApplicationController
     def restart
       set_app
       @addon = @app.addons.find(params[:id])
+      halt_if_suspended!
       AddonService.new(@addon).restart if defined?(AddonService)
       @addon.update!(status: :running)
       AddonSerializer.new(@addon).serializable_hash.dig(:data, :attributes).to_json
@@ -194,6 +200,13 @@ class AddonsController < ApplicationController
     end
 
     private
+
+    def halt_if_suspended!
+      return unless @addon.suspended?
+
+      halt 403, { 'Content-Type' => 'application/json' },
+           { error: "#{@addon.name} is suspended because it does not fit the #{current_user.plan.capitalize} plan. Upgrade your plan to start it again." }.to_json
+    end
 
     def set_postgresql_addon
       set_app

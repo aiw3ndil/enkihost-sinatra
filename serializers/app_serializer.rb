@@ -2,7 +2,7 @@ class AppSerializer
   include JSONAPI::Serializer
   attributes :id, :name, :subdomain, :kind, :build_pack, :deployment_type, :repository_url, :branch, 
              :port, :cpu_limit, :memory_limit, :runtime_status, :coolify_uuid, :webhook_url, :webhook_secret,
-             :last_deployment_status, :created_at, :updated_at
+             :last_deployment_status, :suspended_at, :created_at, :updated_at
 
   attribute :domains do |object|
     object.hostnames

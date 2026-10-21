@@ -50,6 +50,11 @@ class Addon < ApplicationRecord
     config['url'].presence
   end
 
+  # Stopped because it no longer fits the user's plan (see PlanEnforcementService)
+  def suspended?
+    suspended_at.present?
+  end
+
   validates :kind, presence: true, inclusion: { in: kinds.keys }
   validates :status, presence: true, inclusion: { in: statuses.keys }
   validates :name, presence: true, uniqueness: { scope: :app_id }

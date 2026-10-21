@@ -2,7 +2,7 @@
 
 class AddonSerializer
   include JSONAPI::Serializer
-  attributes :id, :kind, :name, :status, :app_id, :created_at
+  attributes :id, :kind, :name, :status, :app_id, :suspended_at, :created_at
 
   attribute :config do |addon|
     cfg = addon.config
