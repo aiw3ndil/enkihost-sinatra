@@ -16,7 +16,7 @@ class User < ApplicationRecord
 
   PLAN_LIMITS = {
     'spark' => {
-      max_apps: 1,
+      max_apps: 3,
       allowed_kinds: ['jekyll'],
       max_postgresql: 0,
       max_redis: 0,
@@ -27,7 +27,7 @@ class User < ApplicationRecord
       custom_domains: false,
       ha: false,
       autoscaling: false,
-      max_storages: 1
+      max_storages: 3
     },
     'ignite' => {
       max_apps: 2,

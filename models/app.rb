@@ -42,6 +42,7 @@ class App < ApplicationRecord
   validates :runtime_status, presence: true, inclusion: { in: runtime_statuses.keys }
   validates :port, numericality: { only_integer: true, allow_nil: true }
   validate :validate_app_limit, on: :create
+  validate :validate_allowed_kind, if: -> { new_record? || will_save_change_to_kind? }
 
   before_validation :normalize_name
   before_validation :set_default_branch
@@ -263,6 +264,12 @@ class App < ApplicationRecord
     if user.apps.count >= user.limits[:max_apps]
       errors.add(:base, "You have reached the maximum number of applications for your #{user.plan.capitalize} plan.")
     end
+  end
+
+  # Checked on create and whenever the kind changes, so an update cannot turn
+  # a Jekyll site into a Rails or Sinatra app on a plan that does not allow it.
+  def validate_allowed_kind
+    return unless user
 
     unless user.limits[:allowed_kinds].include?(kind)
       errors.add(:kind, "is not allowed on the #{user.plan.capitalize} plan (Allowed: #{user.limits[:allowed_kinds].join(', ')})")
